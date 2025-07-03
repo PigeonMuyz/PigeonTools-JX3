@@ -743,3 +743,69 @@ extension DungeonManager {
         }
     }
 }
+
+extension DungeonManager {
+    
+    /// 修改指定记录的角色
+    func updateRecordCharacter(_ record: CompletionRecord, to newCharacter: GameCharacter) {
+        if let index = completionRecords.firstIndex(where: { $0.id == record.id }) {
+            let updatedRecord = CompletionRecord(
+                dungeonName: record.dungeonName,
+                character: newCharacter,
+                completedDate: record.completedDate,
+                weekNumber: record.weekNumber,
+                year: record.year,
+                duration: record.duration,
+                drops: record.drops
+            )
+            
+            completionRecords[index] = updatedRecord
+            
+            // 重新同步统计数据
+            syncStatisticsFromRecords()
+            saveData()
+            
+            print("已将记录角色从 \(record.character.displayName) 更新为 \(newCharacter.displayName)")
+        }
+    }
+    
+    /// 批量修改角色（可选功能）
+    func batchUpdateRecordsCharacter(from oldCharacter: GameCharacter, to newCharacter: GameCharacter) {
+        var updatedCount = 0
+        
+        for i in 0..<completionRecords.count {
+            let record = completionRecords[i]
+            if record.character.id == oldCharacter.id {
+                let updatedRecord = CompletionRecord(
+                    dungeonName: record.dungeonName,
+                    character: newCharacter,
+                    completedDate: record.completedDate,
+                    weekNumber: record.weekNumber,
+                    year: record.year,
+                    duration: record.duration,
+                    drops: record.drops
+                )
+                completionRecords[i] = updatedRecord
+                updatedCount += 1
+            }
+        }
+        
+        if updatedCount > 0 {
+            syncStatisticsFromRecords()
+            saveData()
+            print("批量更新了 \(updatedCount) 条记录，从 \(oldCharacter.displayName) 到 \(newCharacter.displayName)")
+        }
+    }
+    
+    /// 获取各角色的记录数量统计（调试用）
+    func getCharacterRecordCounts() -> [(character: GameCharacter, count: Int)] {
+        let groups = Dictionary(grouping: completionRecords) { $0.character.id }
+        
+        return groups.compactMap { (characterId, records) in
+            if let character = characters.first(where: { $0.id == characterId }) {
+                return (character: character, count: records.count)
+            }
+            return nil
+        }.sorted { $0.count > $1.count }
+    }
+}
