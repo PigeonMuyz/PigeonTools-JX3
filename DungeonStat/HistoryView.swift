@@ -65,7 +65,7 @@ struct HistoryView: View {
     }
 }
 
-// MARK: - 记录行视图组件（添加角色编辑功能）
+// MARK: - 记录行视图组件（修改后的布局）
 struct RecordRowView: View {
     let record: CompletionRecord
     @EnvironmentObject var dungeonManager: DungeonManager
@@ -73,7 +73,7 @@ struct RecordRowView: View {
     
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
-            // 第一行：副本名称和日期
+            // 第一行：副本名称 + 完成时间
             HStack {
                 Text(record.dungeonName)
                     .font(.headline)
@@ -86,152 +86,57 @@ struct RecordRowView: View {
                     .foregroundColor(.secondary)
             }
             
-            // 第二行：角色信息和车次（添加可点击修改角色功能）
+            // 第二行：服务器 - 角色名
             HStack {
-                Button(action: {
-                    showingCharacterSelector = true
-                }) {
-                    HStack(spacing: 4) {
-                        Text("\(record.character.server) - \(record.character.name)")
-                            .font(.subheadline)
-                            .foregroundColor(.blue)
-//                        
-//                        Image(systemName: "pencil.circle")
-//                            .font(.caption)
-//                            .foregroundColor(.blue)
-                    }
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                Spacer()
-                
-                Text("\(record.dungeonName) 第\(dungeonManager.getCharacterRunNumber(for: record))车")
+                Text("\(record.character.server) - \(record.character.name)")
                     .font(.subheadline)
-                    .foregroundColor(.purple)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.purple.opacity(0.1))
-                    .cornerRadius(4)
+                    .foregroundColor(.primary)
             }
             
-            // 第三行：用时和总车次
-            HStack {
-                Text("用时 \(formatDuration(record.duration))")
-                    .font(.subheadline)
-                    .foregroundColor(.orange)
+            // 第三行：标签式显示进度和用时
+            HStack(spacing: 8) {
+                // 当前副本车次标签
+                HStack(spacing: 4) {
+                    Text("当前角色的副本\n第\(dungeonManager.getCharacterRunNumber(for: record))车")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.blue.opacity(0.15))
+                .cornerRadius(6)
+                
+                // 渡渡鸟总车次标签
+                HStack(spacing: 4) {
+                    Text("渡渡鸟帮刷\n第\(dungeonManager.getTotalRunNumber(for: record))车")
+                        .font(.caption)
+                        .foregroundColor(.purple)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.purple.opacity(0.15))
+                .cornerRadius(6)
+                
+                // 用时标签
+                HStack(spacing: 4) {
+                    Text("用时\n\(formatDuration(record.duration))")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.orange.opacity(0.15))
+                .cornerRadius(6)
                 
                 Spacer()
-                
-                Text("渡渡鸟帮刷 总共第\(dungeonManager.getTotalRunNumber(for: record))车")
-                    .font(.caption)
-                    .foregroundColor(.gray)
-                    .padding(.horizontal, 4)
-                    .padding(.vertical, 1)
-                    .background(Color.gray.opacity(0.1))
-                    .cornerRadius(3)
             }
             
             // 第四行：掉落显示
             DropDisplayView(drops: record.drops)
         }
         .padding(.vertical, 6)
-//        .sheet(isPresented: $showingCharacterSelector) {
-//            CharacterSelectorViews(
-//                currentCharacter: record.character,
-//                availableCharacters: dungeonManager.characters,
-//                isPresented: $showingCharacterSelector,
-//                onCharacterSelected: { newCharacter in
-//                    dungeonManager.updateRecordCharacter(record, to: newCharacter)
-//                }
-//            )
-//        }
     }
 }
-
-//// MARK: - 角色选择器视图
-//struct CharacterSelectorViews: View {
-//    let currentCharacter: GameCharacter
-//    let availableCharacters: [GameCharacter]
-//    @Binding var isPresented: Bool
-//    let onCharacterSelected: (GameCharacter) -> Void
-//    
-//    var body: some View {
-//        NavigationView {
-//            List {
-//                Section(header: Text("选择正确的角色")) {
-//                    ForEach(availableCharacters) { character in
-//                        Button(action: {
-//                            onCharacterSelected(character)
-//                            isPresented = false
-//                        }) {
-//                            HStack {
-//                                VStack(alignment: .leading, spacing: 4) {
-//                                    Text(character.name)
-//                                        .font(.headline)
-//                                        .foregroundColor(.primary)
-//                                    
-//                                    HStack {
-//                                        Text(character.server)
-//                                            .font(.caption)
-//                                            .foregroundColor(.blue)
-//                                        
-//                                        Text("•")
-//                                            .font(.caption)
-//                                            .foregroundColor(.secondary)
-//                                        
-//                                        Text(character.school)
-//                                            .font(.caption)
-//                                            .foregroundColor(.secondary)
-//                                        
-//                                        Text("•")
-//                                            .font(.caption)
-//                                            .foregroundColor(.secondary)
-//                                        
-//                                        Text(character.bodyType)
-//                                            .font(.caption)
-//                                            .foregroundColor(.secondary)
-//                                    }
-//                                }
-//                                
-//                                Spacer()
-//                                
-//                                if character.id == currentCharacter.id {
-//                                    HStack {
-//                                        Text("当前")
-//                                            .font(.caption)
-//                                            .foregroundColor(.blue)
-//                                        Image(systemName: "checkmark.circle.fill")
-//                                            .foregroundColor(.blue)
-//                                    }
-//                                } else {
-//                                    Image(systemName: "circle")
-//                                        .foregroundColor(.secondary)
-//                                }
-//                            }
-//                        }
-//                        .buttonStyle(PlainButtonStyle())
-//                    }
-//                }
-//                
-//                Section {
-//                    Text("当前记录的角色是：\(currentCharacter.displayName)")
-//                        .font(.caption)
-//                        .foregroundColor(.secondary)
-//                        .italic()
-//                }
-//            }
-//            .navigationTitle("修改角色")
-//            .navigationBarTitleDisplayMode(.inline)
-//            .toolbar {
-//                ToolbarItem(placement: .navigationBarTrailing) {
-//                    Button("取消") {
-//                        isPresented = false
-//                    }
-//                }
-//            }
-//        }
-//    }
-//}
 
 // MARK: - 掉落显示组件
 struct DropDisplayView: View {

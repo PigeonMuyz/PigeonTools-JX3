@@ -656,15 +656,10 @@ extension DungeonManager {
     
     /// 获取指定角色在所有副本的总车数
     func getTotalRunNumber(for record: CompletionRecord) -> Int {
-        let characterRecords = completionRecords
-            .filter {
-                $0.character.server == record.character.server &&
-                $0.character.name == record.character.name &&
-                $0.character.school == record.character.school
-            }
+        let recordIndex = completionRecords
             .sorted { $0.completedDate < $1.completedDate }
-        
-        return (characterRecords.firstIndex { $0.id == record.id } ?? 0) + 1
+            .firstIndex { $0.id == record.id } ?? 0
+        return recordIndex + 1
     }
     
     /// 获取指定角色在指定副本的当前总车数
@@ -696,10 +691,40 @@ extension DungeonManager {
     
 }
 
-// MARK: - DungeonManager 扩展
+// MARK: - 掉落物拓展
 extension DungeonManager {
     
-    // 为记录添加掉落物品
+    // 批量为记录添加掉落物品 - 新增方法
+    func addMultipleDropsToRecord(_ record: CompletionRecord, dropNames: [String]) {
+        guard !dropNames.isEmpty else { return }
+        
+        if let index = completionRecords.firstIndex(where: { $0.id == record.id }) {
+            var currentRecord = completionRecords[index]
+            var newDrops = currentRecord.drops
+            
+            // 批量创建 DropItem 并添加
+            for dropName in dropNames {
+                let dropItem = DropItem(name: dropName)
+                newDrops.append(dropItem)
+            }
+            
+            // 创建新记录
+            let newRecord = CompletionRecord(
+                dungeonName: currentRecord.dungeonName,
+                character: currentRecord.character,
+                completedDate: currentRecord.completedDate,
+                weekNumber: currentRecord.weekNumber,
+                year: currentRecord.year,
+                duration: currentRecord.duration,
+                drops: newDrops
+            )
+            
+            completionRecords[index] = newRecord
+            saveData()
+        }
+    }
+    
+    // 为记录添加掉落物品 - 保持原有方法
     func addDropToRecord(_ record: CompletionRecord, dropItem: DropItem) {
         if let index = completionRecords.firstIndex(where: { $0.id == record.id }) {
             var currentRecord = completionRecords[index]
@@ -744,6 +769,7 @@ extension DungeonManager {
     }
 }
 
+// 紧急修复历史纪录问题
 extension DungeonManager {
     
     /// 修改指定记录的角色

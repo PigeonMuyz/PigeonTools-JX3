@@ -135,6 +135,11 @@ struct WeeklyDetailView: View {
         }
     }
     
+    // 新增：有掉落的记录
+    private var recordsWithDrops: [CompletionRecord] {
+        weekRecords.filter { !$0.drops.isEmpty }
+    }
+    
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
@@ -142,10 +147,11 @@ struct WeeklyDetailView: View {
                 TaskOverviewCard(records: weekRecords)
                 
                 if !weekRecords.isEmpty {
-                    // 选项卡
+                    // 选项卡 - 新增掉落统计
                     Picker("统计类型", selection: $selectedTab) {
                         Text("角色完成情况").tag(0)
                         Text("副本耗时对比").tag(1)
+                        Text("掉落统计").tag(2)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
@@ -156,6 +162,12 @@ struct WeeklyDetailView: View {
                         CharacterCompletionView(records: weekRecords)
                     case 1:
                         DungeonTimeComparisonView(records: weekRecords)
+                    case 2:
+                        DropStatisticsView(
+                            records: weekRecords,
+                            recordsWithDrops: recordsWithDrops,
+                            dungeonManager: dungeonManager
+                        )
                     default:
                         EmptyView()
                     }
@@ -176,6 +188,177 @@ struct WeeklyDetailView: View {
         }
         .navigationTitle(report.displayTitle)
         .navigationBarTitleDisplayMode(.large)
+    }
+}
+
+// MARK: - 新增：掉落统计视图
+struct DropStatisticsView: View {
+    let records: [CompletionRecord]
+    let recordsWithDrops: [CompletionRecord]
+    let dungeonManager: DungeonManager
+    
+    private var dropSummary: DropSummaryData {
+        DropSummaryData(records: records, recordsWithDrops: recordsWithDrops, dungeonManager: dungeonManager)
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // 掉落总览
+            DropSummaryCard(summary: dropSummary)
+            
+            if recordsWithDrops.isEmpty {
+                // 空状态
+                VStack(spacing: 16) {
+                    Image(systemName: "tray")
+                        .font(.system(size: 48))
+                        .foregroundColor(.gray)
+                    
+                    Text("本周暂无特殊掉落")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                // 角色掉落详情
+                Text("角色掉落详情")
+                    .font(.headline)
+                    .padding(.horizontal)
+                
+                ForEach(dropSummary.characterSummaries) { characterSummary in
+                    CharacterDropSummaryCard(summary: characterSummary)
+                }
+            }
+        }
+    }
+}
+
+// MARK: - 新增：掉落总览卡片
+struct DropSummaryCard: View {
+    let summary: DropSummaryData
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("掉落统计")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                Spacer()
+            }
+            
+            HStack(spacing: 16) {
+                OverviewMetric(
+                    title: "总特殊掉落数量",
+                    value: "\(summary.totalDrops)",
+                    subtitle: "个",
+                    color: .purple
+                )
+                
+                OverviewMetric(
+                    title: "获得特殊的倒霉蛋",
+                    value: "\(summary.luckyCharacters)",
+                    subtitle: "个",
+                    color: .green
+                )
+                
+                OverviewMetric(
+                    title: "出货次数",
+                    value: "\(summary.dropInstances)",
+                    subtitle: "次",
+                    color: .orange
+                )
+                
+                OverviewMetric(
+                    title: "玄晶数量",
+                    value: "\(summary.xuanjingCount)",
+                    subtitle: "个",
+                    color: .blue
+                )
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+}
+
+// MARK: - 新增：角色掉落详情卡片
+struct CharacterDropSummaryCard: View {
+    let summary: CharacterDropSummary
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // 角色信息
+            HStack {
+                Text(summary.character.displayName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Text("获得 \(summary.totalItems) 个物品")
+                    .font(.subheadline)
+                    .foregroundColor(.purple)
+                    .fontWeight(.medium)
+            }
+            
+            // 掉落列表
+            VStack(spacing: 8) {
+                ForEach(summary.dropEvents) { event in
+                    DropEventRow(event: event)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+}
+
+// MARK: - 新增：掉落事件行
+struct DropEventRow: View {
+    let event: DropEvent
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            // 物品颜色指示器
+            Circle()
+                .fill(event.itemColor)
+                .frame(width: 8, height: 8)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                // 物品名称
+                Text(event.itemName)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(event.itemColor)
+                
+                // 详细信息
+                HStack(spacing: 8) {
+                    Text(event.dungeonName)
+                        .font(.caption)
+                        .foregroundColor(.primary)
+                    
+                    Text("第\(event.runNumber)车")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Color.blue.opacity(0.15))
+                        .cornerRadius(3)
+                    
+                    Text(event.time, formatter: timeFormatter)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+            }
+            
+            Spacer()
+        }
+        .padding()
+        .background(Color(.systemGray5))
+        .cornerRadius(8)
     }
 }
 
@@ -546,6 +729,71 @@ struct CharacterTimeData: Identifiable {
     let completions: Int
 }
 
+// MARK: - 新增：掉落统计数据模型
+struct DropSummaryData {
+    let totalDrops: Int
+    let luckyCharacters: Int
+    let dropInstances: Int
+    let xuanjingCount: Int
+    let characterSummaries: [CharacterDropSummary]
+    
+    init(records: [CompletionRecord], recordsWithDrops: [CompletionRecord], dungeonManager: DungeonManager) {
+        self.totalDrops = recordsWithDrops.reduce(0) { $0 + $1.drops.count }
+        self.dropInstances = recordsWithDrops.count
+        
+        // 按角色分组
+        let characterGroups = Dictionary(grouping: recordsWithDrops) { record in
+            "\(record.character.server)-\(record.character.name)"
+        }
+        
+        self.luckyCharacters = characterGroups.count
+        
+        // 统计玄晶数量
+        self.xuanjingCount = recordsWithDrops.reduce(0) { total, record in
+            total + record.drops.filter { $0.name.contains("玄晶") }.count
+        }
+        
+        // 生成角色简报
+        self.characterSummaries = characterGroups.compactMap { (key, records) in
+            guard let firstRecord = records.first else { return nil }
+            
+            let dropEvents = records.flatMap { record -> [DropEvent] in
+                record.drops.map { drop in
+                    DropEvent(
+                        itemName: drop.name,
+                        itemColor: drop.color,
+                        dungeonName: record.dungeonName,
+                        runNumber: dungeonManager.getCharacterRunNumber(for: record),
+                        time: record.completedDate
+                    )
+                }
+            }.sorted { $0.time > $1.time }
+            
+            return CharacterDropSummary(
+                character: firstRecord.character,
+                totalItems: dropEvents.count,
+                dropEvents: dropEvents
+            )
+        }.sorted { $0.totalItems > $1.totalItems }
+    }
+}
+
+struct CharacterDropSummary: Identifiable {
+    let id = UUID()
+    let character: GameCharacter
+    let totalItems: Int
+    let dropEvents: [DropEvent]
+}
+
+struct DropEvent: Identifiable {
+    let id = UUID()
+    let itemName: String
+    let itemColor: Color
+    let dungeonName: String
+    let runNumber: Int
+    let time: Date
+}
+
 // MARK: - 格式化函数
 private func formatDurationShort(_ duration: TimeInterval) -> String {
     let hours = Int(duration) / 3600
@@ -567,5 +815,12 @@ private let gameWeekFormatter: DateFormatter = {
 private let dateTimeFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "M月d日 HH:mm"
+    return formatter
+}()
+
+// 新增：时间格式化器
+private let timeFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "MM-dd HH:mm"
     return formatter
 }()

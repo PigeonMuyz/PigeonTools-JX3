@@ -8,7 +8,7 @@
 import SwiftUI
 import PhotosUI
 import Vision
-import Combine  // 添加这个导入
+import Combine
 
 // MARK: - 智能OCR管理器
 class SmartOCRManager: ObservableObject {
@@ -27,6 +27,7 @@ class SmartOCRManager: ObservableObject {
         var fullText: String          // 可编辑
         let originalText: String      // 原始识别文本
         let matchedKeyword: String
+        var isSelected: Bool = false  // 新增：选中状态
         
         var isGoldItem: Bool {
             return fullText.contains("玄晶")
@@ -87,7 +88,8 @@ class SmartOCRManager: ObservableObject {
                             let item = RecognizedItem(
                                 fullText: cleanText,
                                 originalText: cleanText,
-                                matchedKeyword: keyword
+                                matchedKeyword: keyword,
+                                isSelected: true // 默认选中
                             )
                             
                             // 避免重复添加相同的文本
@@ -125,6 +127,20 @@ class SmartOCRManager: ObservableObject {
         if let index = recognizedItems.firstIndex(where: { $0.id == item.id }) {
             recognizedItems[index].fullText = newText
         }
+    }
+    
+    func toggleItemSelection(_ item: RecognizedItem) {
+        if let index = recognizedItems.firstIndex(where: { $0.id == item.id }) {
+            recognizedItems[index].isSelected.toggle()
+        }
+    }
+    
+    func getSelectedItems() -> [RecognizedItem] {
+        return recognizedItems.filter { $0.isSelected }
+    }
+    
+    func clearResults() {
+        recognizedItems = []
     }
 }
 
@@ -182,7 +198,7 @@ struct DropManagementView: View {
                             
                             // 类型标识
                             if drop.name.contains("玄晶") {
-                                Text("金装")
+                                Text("大铁")
                                     .font(.caption)
                                     .foregroundColor(drop.color)
                                     .padding(.horizontal, 6)
@@ -235,18 +251,14 @@ struct DropManagementView: View {
     }()
 }
 
-// MARK: - 智能添加掉落视图
-struct SmartAddDropView: View {
-    let record: CompletionRecord
-    @Binding var isPresented: Bool
-    @EnvironmentObject var dungeonManager: DungeonManager
+// MARK: - 掉落物品条目
+struct DropItem_Input: Identifiable {
+    let id = UUID()
+    var name: String
+    var isFromOCR: Bool = false
     
-    @State private var manualDropName = ""
-    @State private var selectedPhotoItem: PhotosPickerItem?
-    @StateObject private var ocrManager = SmartOCRManager()
-    
-    private var previewColor: Color {
-        if manualDropName.contains("玄晶") {
+    var color: Color {
+        if name.contains("玄晶") {
             return Color(UIColor { traitCollection in
                 switch traitCollection.userInterfaceStyle {
                 case .dark:
@@ -266,25 +278,73 @@ struct SmartAddDropView: View {
             })
         }
     }
+}
+
+// MARK: - 智能添加掉落视图
+struct SmartAddDropView: View {
+    let record: CompletionRecord
+    @Binding var isPresented: Bool
+    @EnvironmentObject var dungeonManager: DungeonManager
+    
+    @State private var dropItems: [DropItem_Input] = [DropItem_Input(name: "")]
+    @State private var selectedPhotoItem: PhotosPickerItem?
+    @StateObject private var ocrManager = SmartOCRManager()
+    
+    // 临时存储数组，避免重复添加
+    @State private var tempRecognizedNames: Set<String> = []
     
     var body: some View {
         NavigationView {
             List {
-                Section(header: Text("手动输入")) {
-                    TextField("物品名称", text: $manualDropName)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                Section(header: HStack {
+                    Text("掉落物品")
+                    Spacer()
+                    if dropItems.count > 1 {
+                        Text("\(dropItems.count) 个")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }) {
+                    ForEach(dropItems.indices, id: \.self) { index in
+                        HStack(spacing: 12) {
+                            // 颜色指示器
+                            if !dropItems[index].name.isEmpty {
+                                Circle()
+                                    .fill(dropItems[index].color)
+                                    .frame(width: 8, height: 8)
+                            }
+                            
+                            TextField("输入物品名称", text: $dropItems[index].name)
+                                .foregroundColor(dropItems[index].name.isEmpty ? .primary : dropItems[index].color)
+                            
+                            // OCR标识
+                            if dropItems[index].isFromOCR {
+                                Image(systemName: "eye.fill")
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                            }
+                            
+                            // 删除按钮
+                            if dropItems.count > 1 {
+                                Button(action: {
+                                    dropItems.remove(at: index)
+                                }) {
+                                    Image(systemName: "minus.circle.fill")
+                                        .foregroundColor(.red)
+                                }
+                            }
+                        }
+                    }
                     
-                    if !manualDropName.isEmpty {
+                    // 添加更多按钮
+                    Button(action: {
+                        addEmptyInputField()
+                    }) {
                         HStack {
-                            Text("预览:")
-                                .foregroundColor(.secondary)
-                            Text(manualDropName)
-                                .foregroundColor(previewColor)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(previewColor.opacity(0.15))
-                                .cornerRadius(6)
-                            Spacer()
+                            Image(systemName: "plus.circle")
+                                .foregroundColor(.blue)
+                            Text("添加更多")
+                                .foregroundColor(.blue)
                         }
                     }
                 }
@@ -301,7 +361,7 @@ struct SmartAddDropView: View {
                             VStack(alignment: .leading) {
                                 Text("选择照片识别")
                                     .foregroundColor(.blue)
-                                Text("自动识别：玄晶、精炼石、强化石等")
+                                Text("识别结果会自动添加到上方列表")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
                             }
@@ -325,30 +385,6 @@ struct SmartAddDropView: View {
                         }
                     }
                 }
-                
-                // 识别结果
-                if !ocrManager.recognizedItems.isEmpty {
-                    Section(header: HStack {
-                        Text("识别结果")
-                        Spacer()
-                        Text("找到 \(ocrManager.recognizedItems.count) 个")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }) {
-                        ForEach(ocrManager.recognizedItems) { item in
-                            RecognizedItemRow(
-                                item: item,
-                                onTextChanged: { newText in
-                                    ocrManager.updateItemText(item, newText: newText)
-                                },
-                                onAdd: { finalText in
-                                    let drop = DropItem(name: finalText)
-                                    dungeonManager.addDropToRecord(record, dropItem: drop)
-                                }
-                            )
-                        }
-                    }
-                }
             }
             .navigationTitle("添加掉落")
             .navigationBarTitleDisplayMode(.inline)
@@ -360,13 +396,9 @@ struct SmartAddDropView: View {
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button("保存") {
-                        if !manualDropName.isEmpty {
-                            let drop = DropItem(name: manualDropName)
-                            dungeonManager.addDropToRecord(record, dropItem: drop)
-                        }
-                        isPresented = false
+                        saveAllDrops()
                     }
-                    .disabled(manualDropName.isEmpty && ocrManager.recognizedItems.isEmpty)
+                    .disabled(!hasValidDrops())
                 }
             }
             .onChange(of: selectedPhotoItem) { photoItem in
@@ -375,182 +407,97 @@ struct SmartAddDropView: View {
                        let data = try? await photoItem.loadTransferable(type: Data.self),
                        let image = UIImage(data: data) {
                         
-                        ocrManager.recognizeText(from: image) { items in
-                            // 结果已经在 ocrManager.recognizedItems 中更新
+                        ocrManager.recognizeText(from: image) { recognizedItems in
+                            // 使用临时数组避免重复
+                            addRecognizedItemsToListSafely(recognizedItems)
                         }
                     }
                 }
             }
         }
     }
-}
-
-// MARK: - 识别结果行组件
-struct RecognizedItemRow: View {
-    let item: SmartOCRManager.RecognizedItem
-    let onTextChanged: (String) -> Void
-    let onAdd: (String) -> Void
     
-    @State private var showingEditSheet = false
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 12) {
-                // 颜色指示器
-                Circle()
-                    .fill(item.color)
-                    .frame(width: 8, height: 8)
-                
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(item.fullText)
-                        .foregroundColor(item.color)
-                        .font(.body)
-                    
-                    if item.fullText != item.originalText {
-                        Text("原文: \(item.originalText)")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                            .strikethrough()
-                    }
-                    
-                    Text("关键字: \(item.matchedKeyword)")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                HStack(spacing: 8) {
-                    // 编辑按钮
-                    Button(action: {
-                        showingEditSheet = true
-                    }) {
-                        Image(systemName: "pencil")
-                            .foregroundColor(.orange)
-                    }
-                    
-                    // 添加按钮
-                    Button(action: {
-                        onAdd(item.fullText)
-                    }) {
-                        Image(systemName: "plus.circle.fill")
-                            .foregroundColor(.blue)
-                    }
-                }
+    private func addRecognizedItemsToListSafely(_ recognizedItems: [SmartOCRManager.RecognizedItem]) {
+        var newItems: [DropItem_Input] = []
+        
+        for item in recognizedItems {
+            let itemName = item.fullText.trimmingCharacters(in: .whitespacesAndNewlines)
+            
+            // 检查是否已经存在（包括临时存储和当前列表）
+            let alreadyExists = tempRecognizedNames.contains(itemName) ||
+                               dropItems.contains(where: { $0.name == itemName })
+            
+            if !alreadyExists && !itemName.isEmpty {
+                // 添加到临时存储
+                tempRecognizedNames.insert(itemName)
+                // 收集新物品
+                newItems.append(DropItem_Input(name: itemName, isFromOCR: true))
             }
         }
-        .sheet(isPresented: $showingEditSheet) {
-            EditItemSheet(
-                item: item,
-                isPresented: $showingEditSheet,
-                onSave: { newText in
-                    onTextChanged(newText)
-                }
-            )
-        }
-    }
-}
-
-// MARK: - 编辑物品名称弹窗
-struct EditItemSheet: View {
-    let item: SmartOCRManager.RecognizedItem
-    @Binding var isPresented: Bool
-    let onSave: (String) -> Void
-    
-    @State private var editingText = ""
-    
-    var previewColor: Color {
-        if editingText.contains("玄晶") {
-            return Color(UIColor { traitCollection in
-                switch traitCollection.userInterfaceStyle {
-                case .dark:
-                    return UIColor(red: 1.0, green: 0.9, blue: 0.4, alpha: 1.0)
-                default:
-                    return UIColor(red: 0.8, green: 0.6, blue: 0.0, alpha: 1.0)
-                }
-            })
-        } else {
-            return Color(UIColor { traitCollection in
-                switch traitCollection.userInterfaceStyle {
-                case .dark:
-                    return UIColor(red: 0.8, green: 0.6, blue: 1.0, alpha: 1.0)
-                default:
-                    return UIColor(red: 0.6, green: 0.3, blue: 0.8, alpha: 1.0)
-                }
-            })
+        
+        // 批量插入所有新物品，不添加空输入框
+        if !newItems.isEmpty {
+            insertRecognizedItems(newItems)
         }
     }
     
-    var body: some View {
-        NavigationView {
-            VStack(alignment: .leading, spacing: 16) {
-                Text("编辑物品名称")
-                    .font(.headline)
-                    .padding(.horizontal)
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("原始识别:")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                    
-                    Text(item.originalText)
-                        .padding(.horizontal)
-                        .foregroundColor(.secondary)
-                }
-                
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("编辑后:")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                        .padding(.horizontal)
-                    
-                    TextField("物品名称", text: $editingText)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .padding(.horizontal)
-                }
-                
-                if !editingText.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("预览效果:")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                            .padding(.horizontal)
-                        
-                        HStack {
-                            Text(editingText)
-                                .foregroundColor(previewColor)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(previewColor.opacity(0.15))
-                                .cornerRadius(6)
-                            Spacer()
-                        }
-                        .padding(.horizontal)
-                    }
-                }
-                
-                Spacer()
-            }
-            .navigationTitle("编辑物品")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("取消") {
-                        isPresented = false
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("保存") {
-                        onSave(editingText)
-                        isPresented = false
-                    }
-                    .disabled(editingText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-            .onAppear {
-                editingText = item.fullText
+    // 专门用于插入识别结果的方法（不添加空输入框）
+    private func insertRecognizedItems(_ newItems: [DropItem_Input]) {
+        // 先尝试填充现有的空输入框
+        var itemsToInsert = newItems
+        
+        // 找到所有空输入框并填充
+        for (index, item) in dropItems.enumerated() {
+            if item.name.isEmpty && !itemsToInsert.isEmpty {
+                dropItems[index] = itemsToInsert.removeFirst()
             }
         }
+        
+        // 如果还有剩余的识别物品，直接添加到末尾
+        if !itemsToInsert.isEmpty {
+            dropItems.append(contentsOf: itemsToInsert)
+        }
+    }
+    
+    // 手动添加空输入框的方法
+    private func addEmptyInputField() {
+        dropItems.append(DropItem_Input(name: ""))
+    }
+    
+
+    
+    private func addRecognizedItemsToList(_ recognizedItems: [SmartOCRManager.RecognizedItem]) {
+        // 添加识别到的物品
+        for item in recognizedItems {
+            // 避免重复添加相同名称的物品
+            if !dropItems.contains(where: { $0.name == item.fullText }) {
+                dropItems.append(DropItem_Input(name: item.fullText, isFromOCR: true))
+            }
+        }
+        
+        // 确保总是有一个空的输入框在最后，但不要重复添加
+        if dropItems.last?.name.isEmpty != true {
+            dropItems.append(DropItem_Input(name: ""))
+        }
+    }
+    
+    private func hasValidDrops() -> Bool {
+        return dropItems.contains { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+    
+    private func saveAllDrops() {
+        // 收集所有有效的物品名称
+        let validDropNames = dropItems.compactMap { item -> String? in
+            let trimmedName = item.name.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmedName.isEmpty ? nil : trimmedName
+        }
+        
+        // 批量添加到记录中
+        dungeonManager.addMultipleDropsToRecord(record, dropNames: validDropNames)
+        
+        // 清理临时状态
+        tempRecognizedNames.removeAll()
+        
+        isPresented = false
     }
 }
