@@ -50,9 +50,31 @@ struct HistoryView: View {
                             
                             Spacer()
                             
+                            // 显示该副本的第几车
+                            Text("当前副本 第\(dungeonManager.getCharacterRunNumber(for: record))车")
+                                .font(.subheadline)
+                                .foregroundColor(.purple)
+                                .padding(.horizontal, 6)
+                                .padding(.vertical, 2)
+                                .background(Color.purple.opacity(0.1))
+                                .cornerRadius(4)
+                        }
+                        
+                        HStack {
                             Text("用时 \(formatDuration(record.duration))")
                                 .font(.subheadline)
                                 .foregroundColor(.orange)
+                            
+                            Spacer()
+                            
+                            // 可选：显示总第几车（所有副本）
+                            Text("渡渡鸟帮刷 总共第\(dungeonManager.getTotalRunNumber(for: record))车")
+                                .font(.caption)
+                                .foregroundColor(.gray)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 1)
+                                .background(Color.gray.opacity(0.1))
+                                .cornerRadius(3)
                         }
                     }
                     .padding(.vertical, 4)

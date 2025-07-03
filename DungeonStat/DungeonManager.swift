@@ -27,8 +27,6 @@ class DungeonManager: ObservableObject {
         
         // 添加调试输出
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-            print("=== Init 完成后 1 秒检查 ===")
-//            print("selectedCharacter: \(self.selectedCharacter?.displayName ?? "nil")")
             if let character = self.selectedCharacter {
                 for dungeon in self.dungeons {
                     let total = dungeon.totalCount(for: character)
@@ -72,13 +70,8 @@ class DungeonManager: ObservableObject {
             dungeons[i].characterCounts.removeAll()
         }
         
-        print("开始同步数据，完成记录数量: \(completionRecords.count)")
-        print("当前游戏周开始时间: \(currentGameWeekStart)")
-        print("当前角色列表: \(characters.map { $0.displayName })")
-        
         // 根据完成记录重新计算
         for record in completionRecords {
-//            print("处理记录: \(record.character.displayName) - \(record.dungeonName)")
             
             if let dungeonIndex = dungeons.firstIndex(where: { $0.name == record.dungeonName }) {
                 // 查找匹配的角色对象（通过显示名称匹配，而不是对象引用）
@@ -90,8 +83,6 @@ class DungeonManager: ObservableObject {
                     print("警告: 找不到匹配的角色对象: \(record.character.displayName)")
                     continue
                 }
-                
-                print("找到匹配角色: \(matchingCharacter.displayName)")
                 
                 // 更新总计数和总耗时
                 let currentTotal = dungeons[dungeonIndex].characterTotalCounts[matchingCharacter] ?? 0
@@ -114,7 +105,6 @@ class DungeonManager: ObservableObject {
                 if Calendar.current.isDate(currentGameWeekStart, inSameDayAs: recordGameWeekStart) {
                     let currentWeekly = dungeons[dungeonIndex].characterWeeklyCounts[matchingCharacter] ?? 0
                     dungeons[dungeonIndex].characterWeeklyCounts[matchingCharacter] = currentWeekly + 1
-                    print("记录 \(record.dungeonName) - \(matchingCharacter.name) 属于当前游戏周")
                 }
                 
                 // 同步当前计数（设置为总计数）
@@ -129,8 +119,6 @@ class DungeonManager: ObservableObject {
         
         // 打印最终统计结果
         for dungeon in dungeons {
-            print("副本: \(dungeon.name)")
-            print("  角色总计数字典键: \(dungeon.characterTotalCounts.keys.map { $0.displayName })")
             for character in characters {
                 let total = dungeon.characterTotalCounts[character] ?? 0
                 let weekly = dungeon.characterWeeklyCounts[character] ?? 0
@@ -643,7 +631,115 @@ struct DynamicWeeklyReport: Identifiable, Codable {
     let endDate: Date
     
     var displayTitle: String {
-        return "游戏周 \(year)-\(String(format: "%02d", weekNumber))"
+        return "\(year)-\(String(format: "%02d", weekNumber))周"
     }
 }
 
+// MARK: - 角色车数统计
+extension DungeonManager {
+    
+    /// 获取指定角色在指定副本的第几车
+    func getCharacterRunNumber(for record: CompletionRecord, dungeonName: String? = nil) -> Int {
+        let targetDungeonName = dungeonName ?? record.dungeonName
+        
+        let characterRecords = completionRecords
+            .filter {
+                $0.character.server == record.character.server &&
+                $0.character.name == record.character.name &&
+                $0.character.school == record.character.school &&
+                $0.dungeonName == targetDungeonName
+            }
+            .sorted { $0.completedDate < $1.completedDate }
+        
+        return (characterRecords.firstIndex { $0.id == record.id } ?? 0) + 1
+    }
+    
+    /// 获取指定角色在所有副本的总车数
+    func getTotalRunNumber(for record: CompletionRecord) -> Int {
+        let characterRecords = completionRecords
+            .filter {
+                $0.character.server == record.character.server &&
+                $0.character.name == record.character.name &&
+                $0.character.school == record.character.school
+            }
+            .sorted { $0.completedDate < $1.completedDate }
+        
+        return (characterRecords.firstIndex { $0.id == record.id } ?? 0) + 1
+    }
+    
+    /// 获取指定角色在指定副本的当前总车数
+    func getCurrentRunCount(for character: GameCharacter, dungeonName: String) -> Int {
+        return completionRecords.filter {
+            $0.character.server == character.server &&
+            $0.character.name == character.name &&
+            $0.character.school == character.school &&
+            $0.dungeonName == dungeonName
+        }.count
+    }
+    
+    /// 获取指定角色的所有副本车数统计
+    func getAllDungeonRunCounts(for character: GameCharacter) -> [String: Int] {
+        var dungeonCounts: [String: Int] = [:]
+        
+        let characterRecords = completionRecords.filter {
+            $0.character.server == character.server &&
+            $0.character.name == character.name &&
+            $0.character.school == character.school
+        }
+        
+        for record in characterRecords {
+            dungeonCounts[record.dungeonName, default: 0] += 1
+        }
+        
+        return dungeonCounts
+    }
+    
+}
+
+// MARK: - DungeonManager 扩展
+extension DungeonManager {
+    
+    // 为记录添加掉落物品
+    func addDropToRecord(_ record: CompletionRecord, dropItem: DropItem) {
+        if let index = completionRecords.firstIndex(where: { $0.id == record.id }) {
+            var currentRecord = completionRecords[index]
+            var newDrops = currentRecord.drops
+            newDrops.append(dropItem)
+            
+            // 创建新记录
+            let newRecord = CompletionRecord(
+                dungeonName: currentRecord.dungeonName,
+                character: currentRecord.character,
+                completedDate: currentRecord.completedDate,
+                weekNumber: currentRecord.weekNumber,
+                year: currentRecord.year,
+                duration: currentRecord.duration,
+                drops: newDrops
+            )
+            
+            completionRecords[index] = newRecord
+            saveData()
+        }
+    }
+    
+    // 从记录中移除掉落物品
+    func removeDropFromRecord(_ record: CompletionRecord, dropId: UUID) {
+        if let index = completionRecords.firstIndex(where: { $0.id == record.id }) {
+            var currentRecord = completionRecords[index]
+            let newDrops = currentRecord.drops.filter { $0.id != dropId }
+            
+            let newRecord = CompletionRecord(
+                dungeonName: currentRecord.dungeonName,
+                character: currentRecord.character,
+                completedDate: currentRecord.completedDate,
+                weekNumber: currentRecord.weekNumber,
+                year: currentRecord.year,
+                duration: currentRecord.duration,
+                drops: newDrops
+            )
+            
+            completionRecords[index] = newRecord
+            saveData()
+        }
+    }
+}

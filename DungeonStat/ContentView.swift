@@ -63,6 +63,36 @@ struct Dungeon: Identifiable, Codable {
         return characterStartTime[character]
     }
 }
+// MARK: - 掉落物品数据模型
+struct DropItem: Identifiable, Codable, Hashable {
+    let id = UUID()
+    let name: String
+    
+    // 根据名称判断颜色（支持深色模式）
+    var color: Color {
+        if name.contains("玄晶") {
+            // 金色
+            return Color(UIColor { traitCollection in
+                switch traitCollection.userInterfaceStyle {
+                case .dark:
+                    return UIColor(red: 1.0, green: 0.9, blue: 0.4, alpha: 1.0) // 浅金色
+                default:
+                    return UIColor(red: 0.8, green: 0.6, blue: 0.0, alpha: 1.0) // 深金色
+                }
+            })
+        } else {
+            // 紫色
+            return Color(UIColor { traitCollection in
+                switch traitCollection.userInterfaceStyle {
+                case .dark:
+                    return UIColor(red: 0.8, green: 0.6, blue: 1.0, alpha: 1.0) // 浅紫色
+                default:
+                    return UIColor(red: 0.6, green: 0.3, blue: 0.8, alpha: 1.0) // 深紫色
+                }
+            })
+        }
+    }
+}
 
 struct CompletionRecord: Identifiable, Codable, Equatable {
     let id = UUID()
@@ -72,11 +102,22 @@ struct CompletionRecord: Identifiable, Codable, Equatable {
     let weekNumber: Int
     let year: Int
     let duration: TimeInterval
+    let drops: [DropItem]
     
     // Equatable 协议的实现
     static func == (lhs: CompletionRecord, rhs: CompletionRecord) -> Bool {
         return lhs.id == rhs.id
     }
+    init(dungeonName: String, character: GameCharacter, completedDate: Date,
+             weekNumber: Int, year: Int, duration: TimeInterval, drops: [DropItem] = []) {
+            self.dungeonName = dungeonName
+            self.character = character
+            self.completedDate = completedDate
+            self.weekNumber = weekNumber
+            self.year = year
+            self.duration = duration
+            self.drops = drops
+        }
 }
 
 struct WeeklyReport: Identifiable, Codable {
@@ -236,9 +277,6 @@ struct DungeonListView: View {
                 CharacterSelectorView(isPresented: $showingCharacterSelector)
             }
         }
-//        .onAppear {
-//            print("DungeonListView onAppear - selectedCharacter: \(dungeonManager.selectedCharacter?.displayName ?? "nil")")
-//        }
     }
     
     func deleteDungeons(offsets: IndexSet) {
@@ -656,9 +694,7 @@ struct CharacterSelectorView: View {
                     .padding(.vertical, 4)
                     .contentShape(Rectangle())
                     .onTapGesture {
-//                        print("选择角色: \(gameCharacter.displayName)")
                         dungeonManager.selectCharacter(gameCharacter)
-//                        print("选择后 selectedCharacter: \(dungeonManager.selectedCharacter?.displayName ?? "nil")")
                         isPresented = false
                     }
                 }
@@ -673,9 +709,6 @@ struct CharacterSelectorView: View {
                 }
             }
             .onAppear {
-//                print("CharacterSelectorView 出现时:")
-//                print("  当前 selectedCharacter: \(dungeonManager.selectedCharacter?.displayName ?? "nil")")
-//                print("  角色列表: \(dungeonManager.characters.map { $0.displayName })")
             }
         }
     }
