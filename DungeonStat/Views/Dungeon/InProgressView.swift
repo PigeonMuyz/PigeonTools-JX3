@@ -240,9 +240,5 @@ struct InProgressTaskRow: View {
     }
 }
 
-// MARK: - 时间格式化器
-private let startTimeFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "HH:mm"
-    return formatter
-}()
+// MARK: - 全局格式化器别名（保持兼容性）
+private let startTimeFormatter = DateFormatters.startTimeFormatter

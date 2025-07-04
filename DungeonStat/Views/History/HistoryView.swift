@@ -229,22 +229,7 @@ struct DropTag: View {
     }
 }
 
-// MARK: - 格式化器
-private let simpleDateFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "MM-dd HH:mm"
-    return formatter
-}()
-
-private let dateTimeFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateStyle = .short
-    formatter.timeStyle = .short
-    return formatter
-}()
-
-private let gameWeekFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "M月d日 HH:mm"
-    return formatter
-}()
+// MARK: - 全局格式化器别名（保持兼容性）
+private let simpleDateFormatter = DateFormatters.simpleDateFormatter
+private let dateTimeFormatter = DateFormatters.dateTimeFormatter
+private let gameWeekFormatter = DateFormatters.gameWeekFormatter

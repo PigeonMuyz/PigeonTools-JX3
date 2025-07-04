@@ -16,11 +16,7 @@ class SmartOCRManager: ObservableObject {
     @Published var recognizedItems: [RecognizedItem] = []
     
     // 固定关键字列表
-    private let keywords = [
-        "玄晶", "御马踏金", "鞍饰", "头饰", "马具", "足饰",
-        "红莲", "扇风耳", "墨言", "聆音", "清泉侍女像", "北拒风狼",
-        "玄域辟甲", "百合花", "遗忘的书函", "云鹤报捷", "麒麟", "夜泊蝶影",
-        "不渡", "簪花空竹"]
+    private let keywords = Constants.OCRKeywords.dropKeywords
     
     struct RecognizedItem: Identifiable {
         let id = UUID()

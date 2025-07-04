@@ -794,33 +794,7 @@ struct DropEvent: Identifiable {
     let time: Date
 }
 
-// MARK: - 格式化函数
-private func formatDurationShort(_ duration: TimeInterval) -> String {
-    let hours = Int(duration) / 3600
-    let minutes = Int(duration) % 3600 / 60
-    
-    if hours > 0 {
-        return "\(hours)h\(minutes)m"
-    } else {
-        return "\(minutes)m"
-    }
-}
-
-private let gameWeekFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "M月d日"
-    return formatter
-}()
-
-private let dateTimeFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "M月d日 HH:mm"
-    return formatter
-}()
-
-// 新增：时间格式化器
-private let timeFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "MM-dd HH:mm"
-    return formatter
-}()
+// MARK: - 全局格式化器别名（保持兼容性）
+private let gameWeekFormatter = DateFormatters.gameWeekShortFormatter
+private let dateTimeFormatter = DateFormatters.gameWeekFormatter
+private let timeFormatter = DateFormatters.timeFormatter
