@@ -17,19 +17,19 @@ struct ContentView: View {
     
     var body: some View {
         TabView(selection: $selectedTab) {
+            DashboardView()
+                .environmentObject(dungeonManager)
+                .tabItem {
+                    Image(systemName: "house")
+                    Text("任务台")
+                }
+                .tag(0)
+            
             DungeonListView()
                 .environmentObject(dungeonManager)
                 .tabItem {
                     Image(systemName: "list.bullet")
-                    Text("副本列表")
-                }
-                .tag(0)
-            
-            CharacterManagementView()
-                .environmentObject(dungeonManager)
-                .tabItem {
-                    Image(systemName: "person.3")
-                    Text("角色管理")
+                    Text("副本")
                 }
                 .tag(1)
             
@@ -37,41 +37,25 @@ struct ContentView: View {
                 .environmentObject(dungeonManager)
                 .tabItem {
                     Image(systemName: "clock")
-                    Text("历史记录")
+                    Text("历史")
                 }
                 .tag(2)
             
-            WeeklyReportView()
+            StatisticsView()
                 .environmentObject(dungeonManager)
                 .tabItem {
                     Image(systemName: "chart.bar")
-                    Text("周报告")
+                    Text("统计")
                 }
                 .tag(3)
             
-            // 显示条件：有任务时显示，或者没任务但仍在此页面时保持显示
-            if shouldShowInProgressTab {
-                InProgressView()
-                    .environmentObject(dungeonManager)
-                    .tabItem {
-                        Image(systemName: "play.circle")
-                        Text("进行中")
-                    }
-                    .tag(4)
-                    .badge(inProgressCount > 0 ? "\(inProgressCount)" : nil)
-            }
-        }
-        .onChange(of: inProgressCount) { oldValue, newValue in
-            // 如果有任务，标记为曾经有过任务
-            if newValue > 0 {
-                hasEverHadTasks = true
-            }
-        }
-        .onChange(of: selectedTab) { oldValue, newValue in
-            // 如果从"进行中"tab切换到其他tab，且没有任务，则重置状态
-            if oldValue == 4 && newValue != 4 && inProgressCount == 0 {
-                hasEverHadTasks = false
-            }
+            SettingsView()
+                .environmentObject(dungeonManager)
+                .tabItem {
+                    Image(systemName: "gearshape")
+                    Text("设置")
+                }
+                .tag(4)
         }
         .onAppear {
             // 初始化时检查是否有任务
@@ -79,21 +63,6 @@ struct ContentView: View {
                 hasEverHadTasks = true
             }
         }
-    }
-    
-    // 判断是否应该显示"进行中"tab
-    private var shouldShowInProgressTab: Bool {
-        // 有任务时总是显示
-        if inProgressCount > 0 {
-            return true
-        }
-        
-        // 没任务但曾经有过任务，且当前选中的是"进行中"tab时继续显示
-        if hasEverHadTasks && selectedTab == 4 {
-            return true
-        }
-        
-        return false
     }
     
     // 计算进行中任务数量

@@ -8,7 +8,7 @@
 import Foundation
 
 // MARK: - 副本数据模型
-struct Dungeon: Identifiable, Codable {
+struct Dungeon: Identifiable, Codable, Hashable {
     let id = UUID()
     var name: String
     var characterCounts: [GameCharacter: Int] = [:] // 每个角色的当前计数
@@ -47,5 +47,14 @@ struct Dungeon: Identifiable, Codable {
     
     func startTime(for character: GameCharacter) -> Date? {
         return characterStartTime[character]
+    }
+    
+    // MARK: - Hashable & Equatable
+    func hash(into hasher: inout Hasher) {
+        hasher.combine(id)
+    }
+    
+    static func == (lhs: Dungeon, rhs: Dungeon) -> Bool {
+        return lhs.id == rhs.id
     }
 }
