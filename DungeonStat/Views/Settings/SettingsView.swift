@@ -514,6 +514,9 @@ struct DashboardView: View {
                     // 全局进行中任务
                     AllInProgressTasksCard()
                     
+                    // 日常任务卡片
+                    DailyTasksCard()
+                    
                     // 全局今日统计
                     GlobalTodayStatsCard()
                     
@@ -711,6 +714,124 @@ struct QuickStartView: View {
         
         // 关闭窗口
         isPresented = false
+    }
+}
+
+// MARK: - 日常任务卡片
+struct DailyTasksCard: View {
+    @EnvironmentObject var dungeonManager: DungeonManager
+    @State private var showingDailyTasksDetail = false
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Image(systemName: "calendar.badge.clock")
+                    .font(.title2)
+                    .foregroundColor(.blue)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("今日任务")
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                    
+                    Text(taskProgressText)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+                
+                Button(action: {
+                    showingDailyTasksDetail = true
+                }) {
+                    HStack(spacing: 4) {
+                        Text("详情")
+                            .font(.caption)
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                    }
+                    .foregroundColor(.blue)
+                }
+            }
+            
+            // 显示前3个角色的任务进度
+            if !dungeonManager.characters.isEmpty {
+                VStack(spacing: 8) {
+                    ForEach(Array(dungeonManager.characters.prefix(3)), id: \.id) { character in
+                        DailyTaskProgressRow(character: character)
+                    }
+                    
+                    if dungeonManager.characters.count > 3 {
+                        Text("还有 \(dungeonManager.characters.count - 3) 个角色...")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            } else {
+                Text("请先添加角色")
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 20)
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+        .sheet(isPresented: $showingDailyTasksDetail) {
+            DailyTasksDetailView()
+        }
+    }
+    
+    private var taskProgressText: String {
+        let progress = dungeonManager.dailyTaskManager.getAllCharactersTasksProgress()
+        if progress.total == 0 {
+            return "等待刷新任务数据"
+        } else {
+            return "全部进度: \(progress.completed)/\(progress.total)"
+        }
+    }
+}
+
+struct DailyTaskProgressRow: View {
+    let character: GameCharacter
+    @EnvironmentObject var dungeonManager: DungeonManager
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Text(character.name)
+                .font(.subheadline)
+                .foregroundColor(.primary)
+                .frame(width: 80, alignment: .leading)
+            
+            ProgressView(value: progressValue, total: 1.0)
+                .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
+            
+            Text("\(completedCount)/\(totalCount)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .frame(width: 40, alignment: .trailing)
+        }
+    }
+    
+    private var completedCount: Int {
+        dungeonManager.dailyTaskManager.getCompletedTasksCount(for: character)
+    }
+    
+    private var totalCount: Int {
+        dungeonManager.dailyTaskManager.getTotalTasksCount(for: character)
+    }
+    
+    private var progressValue: Double {
+        guard totalCount > 0 else { return 0 }
+        return Double(completedCount) / Double(totalCount)
+    }
+    
+    private var progressColor: Color {
+        if totalCount == 0 { return .gray }
+        if completedCount == totalCount { return .green }
+        if completedCount > totalCount / 2 { return .orange }
+        return .blue
     }
 }
 

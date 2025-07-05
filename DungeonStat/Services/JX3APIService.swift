@@ -112,13 +112,18 @@ class JX3APIService {
             URLQueryItem(name: "name", value: encodedName)
         ]
         
-        // 优先使用ticket，其次使用token
+        // 角色装备信息需要ticket和token v1
         if !ticket.isEmpty {
             queryItems.append(URLQueryItem(name: "ticket", value: ticket))
         }
         
         if !token.isEmpty {
             queryItems.append(URLQueryItem(name: "token", value: token))
+        }
+        
+        // 如果没有必要的令牌，抛出错误
+        if ticket.isEmpty || token.isEmpty {
+            throw APIError.apiError("获取角色装备信息需要配置Ticket和Token V1")
         }
         
         urlComponents.queryItems = queryItems
@@ -135,7 +140,7 @@ class JX3APIService {
         }
         
         let apiResponse = try JSONDecoder().decode(JX3APIDetailResponse.self, from: data)
-        
+        print(apiResponse)
         guard apiResponse.code == 200, let roleData = apiResponse.data else {
             throw APIError.apiError(apiResponse.msg)
         }

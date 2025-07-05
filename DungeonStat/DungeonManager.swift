@@ -20,6 +20,7 @@ class DungeonManager: ObservableObject {
     private let persistenceManager = DataPersistenceManager.shared
     private let statisticsManager = StatisticsManager.shared
     private let weeklyReportManager = WeeklyReportManager.shared
+    @Published var dailyTaskManager = DailyTaskManager()
     
     init() {
 //        // 在加载数据前创建备份（仅在有数据时）
@@ -165,6 +166,11 @@ class DungeonManager: ObservableObject {
                     print("  角色: \(char.displayName) (ID: \(char.id)) -> 总计: \(count)")
                 }
             }
+        }
+        
+        // 刷新日常任务（异步执行）
+        Task {
+            await refreshDailyTasksIfNeeded()
         }
     }
     
@@ -447,5 +453,27 @@ class DungeonManager: ObservableObject {
         }
         
         return info
+    }
+    
+    // MARK: - 日常任务管理
+    @MainActor
+    private func refreshDailyTasksIfNeeded() async {
+        // 检查是否需要刷新日常任务
+        guard dailyTaskManager.shouldRefresh() else {
+            print("日常任务无需刷新")
+            return
+        }
+        
+        print("开始刷新日常任务...")
+        await dailyTaskManager.refreshDailyTasks(for: characters)
+        
+        // 清理旧任务数据
+        dailyTaskManager.cleanupOldTasks()
+    }
+    
+    // 手动刷新日常任务
+    func manualRefreshDailyTasks() async {
+        print("手动刷新日常任务...")
+        await dailyTaskManager.refreshDailyTasks(for: characters)
     }
 }
