@@ -757,7 +757,7 @@ struct StatisticsView: View {
             .navigationTitle("统计")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    NavigationLink(destination: YearlyStatisticsView().environmentObject(dungeonManager)) {
+                    NavigationLink(destination: YearlyReportView().environmentObject(dungeonManager)) {
                         HStack(spacing: 4) {
                             Image(systemName: "chart.bar.fill")
                             Text("年统计")

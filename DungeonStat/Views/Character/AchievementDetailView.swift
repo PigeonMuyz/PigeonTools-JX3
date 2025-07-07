@@ -372,33 +372,16 @@ struct StatisticColumn: View {
 struct AchievementItemView: View {
     let achievement: ProcessedAchievement
     @State private var isExpanded = false
-    @State private var isCompleted = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 成就基本信息
             HStack {
-                // 完成状态按钮
-                Button(action: {
-                    isCompleted.toggle()
-                    if isCompleted {
-                        AchievementCompletionService.shared.markAchievementAsCompleted(achievement.id)
-                    } else {
-                        AchievementCompletionService.shared.markAchievementAsIncomplete(achievement.id)
-                    }
-                }) {
-                    Image(systemName: isCompleted ? "checkmark.circle.fill" : "circle")
-                        .font(.title3)
-                        .foregroundColor(isCompleted ? .green : .gray)
-                }
-                .buttonStyle(PlainButtonStyle())
-                
                 VStack(alignment: .leading, spacing: 4) {
                     Text(achievement.name)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .strikethrough(isCompleted)
-                        .foregroundColor(isCompleted ? .secondary : .primary)
+                        .foregroundColor(.primary)
                     
                     if let shortDesc = achievement.shortDesc {
                         Text(shortDesc)
@@ -524,9 +507,6 @@ struct AchievementItemView: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color(.systemGray4), lineWidth: 1)
         )
-        .onAppear {
-            isCompleted = AchievementCompletionService.shared.isAchievementCompleted(achievement.id)
-        }
     }
 }
 

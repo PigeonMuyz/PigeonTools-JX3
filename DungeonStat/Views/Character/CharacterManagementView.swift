@@ -334,6 +334,7 @@ struct CharacterManagementView: View {
     @State private var showingAddCharacter = false
     @State private var showingCharacterDetail = false
     @State private var showingAttributeComparison = false
+    @State private var showingAchievementComparison = false
     @State private var selectedCharacterForDetail: GameCharacter?
     @State private var selectedCharacterForEquipment: GameCharacter?
     @State private var selectedCharactersForComparison: Set<GameCharacter> = []
@@ -490,7 +491,7 @@ struct CharacterManagementView: View {
                                 .font(.caption)
                                 .foregroundColor(.red)
                                 
-                                Button("开始比较") {
+                                Button("属性比较") {
                                     showingAttributeComparison = true
                                 }
                                 .font(.caption)
@@ -498,6 +499,17 @@ struct CharacterManagementView: View {
                                 .padding(.horizontal, 12)
                                 .padding(.vertical, 6)
                                 .background(Color.blue)
+                                .clipShape(Capsule())
+                                .disabled(selectedCharactersForComparison.count < 2)
+                                
+                                Button("成就比较") {
+                                    showingAchievementComparison = true
+                                }
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.purple)
                                 .clipShape(Capsule())
                                 .disabled(selectedCharactersForComparison.count < 2)
                             }
@@ -598,6 +610,9 @@ struct CharacterManagementView: View {
             }
             .sheet(isPresented: $showingAttributeComparison) {
                 AttributeComparisonSheet(characters: Array(selectedCharactersForComparison))
+            }
+            .sheet(isPresented: $showingAchievementComparison) {
+                AchievementComparisonSheet(characters: Array(selectedCharactersForComparison))
             }
             .sheet(isPresented: $showingAchievementAnalyzer) {
                 if let character = selectedCharacterForAchievement {
@@ -1105,5 +1120,678 @@ struct QixueCard: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(Color.blue.opacity(0.3), lineWidth: 1)
         )
+    }
+}
+
+// MARK: - 成就比较Sheet
+struct AchievementComparisonSheet: View {
+    let characters: [GameCharacter]
+    @Environment(\.dismiss) private var dismiss
+    @State private var isLoading = false
+    @State private var commonIncompleteAchievements: [ProcessedAchievement] = []
+    @State private var characterAchievementData: [GameCharacter: AchievementData] = [:]
+    @State private var processedAchievementData: ProcessedAchievementData?
+    @State private var validationResults: [GameCharacter: ValidationResult] = [:]
+    @State private var errorMessage: String?
+    @State private var filterOption = FilterOption.all
+    @State private var sortOption = SortOption.completion
+    @State private var searchText = ""
+    
+    enum FilterOption: String, CaseIterable {
+        case all = "全部"
+        case highPriority = "高优先级"
+        case mediumPriority = "中优先级"
+        case lowPriority = "低优先级"
+        case unstarted = "未开始"
+        case lowCompletion = "低完成度"
+    }
+    
+    enum SortOption: String, CaseIterable {
+        case completion = "完成度"
+        case dungeonName = "副本名称"
+        case priority = "优先级"
+    }
+    
+    private var filteredAndSortedAchievements: [DungeonAchievementData] {
+        var filtered = commonIncompleteAchievements.map { achievement in
+            createDungeonAchievementData(from: achievement)
+        }
+        
+        // 应用筛选
+        switch filterOption {
+        case .all:
+            break
+        case .highPriority:
+            filtered = filtered.filter { $0.priority == .high }
+        case .mediumPriority:
+            filtered = filtered.filter { $0.priority == .medium }
+        case .lowPriority:
+            filtered = filtered.filter { $0.priority == .low }
+        case .unstarted:
+            filtered = filtered.filter { $0.completionRate == 0 }
+        case .lowCompletion:
+            filtered = filtered.filter { $0.completionRate < 30 }
+        }
+        
+        // 应用搜索
+        if !searchText.isEmpty {
+            filtered = filtered.filter { achievement in
+                achievement.dungeonName.localizedCaseInsensitiveContains(searchText) ||
+                achievement.difficulty.localizedCaseInsensitiveContains(searchText) ||
+                achievement.achievements.contains { $0.name.localizedCaseInsensitiveContains(searchText) }
+            }
+        }
+        
+        // 应用排序
+        switch sortOption {
+        case .completion:
+            filtered.sort { $0.completionRate < $1.completionRate }
+        case .dungeonName:
+            filtered.sort { $0.dungeonName < $1.dungeonName }
+        case .priority:
+            filtered.sort { $0.priority.sortOrder < $1.priority.sortOrder }
+        }
+        
+        return filtered
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack {
+                if isLoading {
+                    loadingView
+                } else if let errorMessage = errorMessage {
+                    errorView(message: errorMessage)
+                } else if commonIncompleteAchievements.isEmpty {
+                    emptyView
+                } else {
+                    contentView
+                }
+            }
+            .navigationTitle("成就比较")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button("关闭") {
+                        dismiss()
+                    }
+                }
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("刷新") {
+                        loadAchievementComparison()
+                    }
+                    .disabled(isLoading)
+                }
+            }
+            .onAppear {
+                loadAchievementComparison()
+            }
+        }
+        .searchable(text: $searchText, prompt: "搜索副本、难度或成就名称")
+    }
+    
+    private var loadingView: some View {
+        VStack(spacing: 20) {
+            ProgressView()
+                .scaleEffect(1.5)
+            Text("正在分析角色成就数据...")
+                .font(.headline)
+                .foregroundColor(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private func errorView(message: String) -> some View {
+        VStack(spacing: 20) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 50))
+                .foregroundColor(.orange)
+            
+            Text("加载失败")
+                .font(.headline)
+            
+            Text(message)
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+            
+            Button("重试") {
+                loadAchievementComparison()
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private var emptyView: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 50))
+                .foregroundColor(.green)
+            
+            Text("太棒了！")
+                .font(.title2)
+                .fontWeight(.bold)
+                .foregroundColor(.green)
+            
+            Text("这些角色没有共同的未完成或低完成度成就")
+                .font(.body)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+    
+    private var contentView: some View {
+        VStack(spacing: 0) {
+            // 筛选和排序控件
+            filtersView
+            
+            // 统计概览
+            statsOverview
+            
+            Divider()
+            
+            // 成就列表
+            ScrollView {
+                LazyVStack(spacing: 12) {
+                    ForEach(filteredAndSortedAchievements) { achievement in
+                        CommonAchievementCard(
+                            achievement: achievement,
+                            characters: characters,
+                            characterAchievementData: characterAchievementData
+                        )
+                    }
+                }
+                .padding()
+            }
+        }
+    }
+    
+    private var filtersView: some View {
+        VStack(spacing: 12) {
+            HStack {
+                Text("筛选:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Picker("筛选", selection: $filterOption) {
+                    ForEach(FilterOption.allCases, id: \.self) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+            }
+            
+            HStack {
+                Text("排序:")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Picker("排序", selection: $sortOption) {
+                    ForEach(SortOption.allCases, id: \.self) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+    }
+    
+    private var statsOverview: some View {
+        HStack(spacing: 16) {
+            AchievementStatItem(
+                title: "共同未完成",
+                value: "\(filteredAndSortedAchievements.count)",
+                subtitle: "个成就",
+                color: .orange
+            )
+            
+            Divider()
+                .frame(height: 40)
+            
+            AchievementStatItem(
+                title: "涉及副本",
+                value: "\(Set(filteredAndSortedAchievements.map { $0.dungeonName }).count)",
+                subtitle: "个",
+                color: .green
+            )
+            
+            Divider()
+                .frame(height: 40)
+            
+            AchievementStatItem(
+                title: "参与角色",
+                value: "\(characters.count)",
+                subtitle: "个",
+                color: .blue
+            )
+        }
+        .padding()
+        .background(Color(.systemGray6))
+    }
+    
+    private func loadAchievementComparison() {
+        isLoading = true
+        errorMessage = nil
+        characterAchievementData.removeAll()
+        validationResults.removeAll()
+        
+        let group = DispatchGroup()
+        var errors: [Error] = []
+        
+        // 首先获取成就数据进行校验（优先使用缓存）
+        group.enter()
+        Task {
+            do {
+                let data: ProcessedAchievementData
+                
+                // 优先使用缓存
+                if let cachedData = AchievementDataService.shared.getCachedAchievementData() {
+                    print("✅ 成就对比使用JX3Box缓存数据")
+                    data = cachedData
+                } else {
+                    print("🌐 成就对比从网络获取JX3Box数据")
+                    data = try await AchievementDataService.shared.fetchAndProcessAchievementData()
+                }
+                
+                await MainActor.run {
+                    self.processedAchievementData = data
+                    group.leave()
+                }
+            } catch {
+                await MainActor.run {
+                    errors.append(error)
+                    group.leave()
+                }
+            }
+        }
+        
+        // 加载每个角色的成就数据
+        for character in characters {
+            group.enter()
+            loadCharacterAchievementData(for: character) { result in
+                switch result {
+                case .success(let achievementData):
+                    self.characterAchievementData[character] = achievementData
+                case .failure(let error):
+                    errors.append(error)
+                }
+                group.leave()
+            }
+        }
+        
+        group.notify(queue: .main) {
+            self.isLoading = false
+            
+            if !errors.isEmpty {
+                self.errorMessage = "部分数据加载失败：\(errors.first?.localizedDescription ?? "未知错误")"
+            } else if let processedData = self.processedAchievementData {
+                self.processAchievementComparison(with: processedData)
+            } else {
+                self.errorMessage = "无法获取成就数据"
+            }
+        }
+    }
+    
+    private func loadCharacterAchievementData(for character: GameCharacter, completion: @escaping (Result<AchievementData, Error>) -> Void) {
+        // 首先尝试从缓存加载
+        if let cachedData = AchievementCacheService.shared.loadCache(for: character.server, name: character.name) {
+            completion(.success(cachedData))
+            return
+        }
+        
+        // 如果没有缓存，从网络加载
+        Task {
+            do {
+                let data = try await JX3APIService.shared.fetchAchievementData(
+                    server: character.server,
+                    name: character.name
+                )
+                
+                // 保存到缓存
+                AchievementCacheService.shared.saveCache(
+                    data: data,
+                    for: character.server,
+                    name: character.name
+                )
+                
+                completion(.success(data))
+            } catch {
+                completion(.failure(error))
+            }
+        }
+    }
+    
+    private func processAchievementComparison(with processedData: ProcessedAchievementData) {
+        var commonAchievements: [ProcessedAchievement] = []
+        
+        // 对每个角色的成就数据进行校验
+        for (character, achievementData) in characterAchievementData {
+            let validationResult = AchievementDataService.shared.validateAchievementData(achievementData, with: processedData)
+            validationResults[character] = validationResult
+        }
+        
+        // 找出所有角色都存在且都没有完成或完成度很低的成就
+        let allDungeonAchievements = Set(validationResults.values.flatMap { result in
+            result.validatedDungeons.flatMap { (dungeonName, difficulties) in
+                difficulties.flatMap { (difficulty, stats) in
+                    stats.achievements.map { achievement in
+                        "\(dungeonName)_\(difficulty)_\(achievement.id)"
+                    }
+                }
+            }
+        })
+        
+        for achievementKey in allDungeonAchievements {
+            let components = achievementKey.split(separator: "_")
+            guard components.count >= 3,
+                  let achievementId = Int(components[2]) else { continue }
+            
+            let dungeonName = String(components[0])
+            let difficulty = String(components[1])
+            
+            // 检查这个成就是否在所有角色中都未完成或完成度很低
+            var isCommonIncomplete = true
+            var achievement: ProcessedAchievement?
+            
+            for (character, validationResult) in validationResults {
+                guard let dungeonStats = validationResult.validatedDungeons[dungeonName]?[difficulty],
+                      let achv = dungeonStats.achievements.first(where: { $0.id == achievementId }) else {
+                    isCommonIncomplete = false
+                    break
+                }
+                
+                if achievement == nil {
+                    achievement = achv
+                }
+                
+                // 检查完成度
+                let completionRate = dungeonStats.calibrated.pieces.total > 0 
+                    ? Double(dungeonStats.calibrated.pieces.speed) / Double(dungeonStats.calibrated.pieces.total) * 100 
+                    : 0
+                
+                // 如果这个角色在这个副本的完成度超过80%，则不算共同未完成
+                if completionRate >= 80.0 {
+                    isCommonIncomplete = false
+                    break
+                }
+                
+                // 检查用户是否已手动标记为完成
+                if AchievementCompletionService.shared.isAchievementCompleted(achievementId) {
+                    isCommonIncomplete = false
+                    break
+                }
+            }
+            
+            if isCommonIncomplete, let achievement = achievement {
+                commonAchievements.append(achievement)
+            }
+        }
+        
+        // 去重并排序
+        let uniqueAchievements = Array(Set(commonAchievements))
+        self.commonIncompleteAchievements = uniqueAchievements.sorted { $0.name < $1.name }
+    }
+    
+    private func createDungeonAchievementData(from achievement: ProcessedAchievement) -> DungeonAchievementData {
+        // 从第一个角色的数据中获取副本信息
+        guard let firstCharacter = characters.first,
+              let validationResult = validationResults[firstCharacter] else {
+            return DungeonAchievementData(
+                dungeonName: achievement.sceneName ?? "未知副本",
+                difficulty: achievement.layerName ?? "未知难度",
+                originalStats: DungeonStats(seniority: SeniorityInfo(total: 0, speed: 0), pieces: PiecesInfo(total: 0, speed: 0)),
+                calibratedStats: DungeonStats(seniority: SeniorityInfo(total: 0, speed: 0), pieces: PiecesInfo(total: 0, speed: 0)),
+                isCalibrated: false,
+                achievements: [achievement],
+                completionRate: 0,
+                potential: 0,
+                priority: .low
+            )
+        }
+        
+        // 查找包含此成就的副本和难度
+        for (dungeonName, difficulties) in validationResult.validatedDungeons {
+            for (difficulty, stats) in difficulties {
+                if stats.achievements.contains(where: { $0.id == achievement.id }) {
+                    let completionRate = stats.calibrated.pieces.total > 0 
+                        ? Double(stats.calibrated.pieces.speed) / Double(stats.calibrated.pieces.total) * 100 
+                        : 0
+                    
+                    let potential = stats.calibrated.seniority.total - stats.calibrated.seniority.speed
+                    
+                    let priority: DungeonAchievementData.Priority
+                    if stats.calibrated.pieces.speed == 0 {
+                        priority = .high
+                    } else if completionRate < 30 {
+                        priority = .high
+                    } else if completionRate < 60 {
+                        priority = .medium
+                    } else {
+                        priority = .low
+                    }
+                    
+                    return DungeonAchievementData(
+                        dungeonName: dungeonName,
+                        difficulty: difficulty,
+                        originalStats: stats.original,
+                        calibratedStats: stats.calibrated,
+                        isCalibrated: stats.isCalibrated,
+                        achievements: stats.achievements,
+                        completionRate: completionRate,
+                        potential: potential,
+                        priority: priority
+                    )
+                }
+            }
+        }
+        
+        // 如果没有找到，返回默认数据
+        return DungeonAchievementData(
+            dungeonName: achievement.sceneName ?? "未知副本",
+            difficulty: achievement.layerName ?? "未知难度",
+            originalStats: DungeonStats(seniority: SeniorityInfo(total: 0, speed: 0), pieces: PiecesInfo(total: 0, speed: 0)),
+            calibratedStats: DungeonStats(seniority: SeniorityInfo(total: 0, speed: 0), pieces: PiecesInfo(total: 0, speed: 0)),
+            isCalibrated: false,
+            achievements: [achievement],
+            completionRate: 0,
+            potential: 0,
+            priority: .low
+        )
+    }
+}
+
+// MARK: - 共同成就卡片
+struct CommonAchievementCard: View {
+    let achievement: DungeonAchievementData
+    let characters: [GameCharacter]
+    let characterAchievementData: [GameCharacter: AchievementData]
+    @State private var showingAchievementDetail = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // 头部信息
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(achievement.dungeonName)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Text(achievement.difficulty)
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                }
+                
+                Spacer()
+                
+                HStack(spacing: 4) {
+                    Image(systemName: achievement.priority.icon)
+                        .font(.caption)
+                    Text(achievement.priority.rawValue)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+                .foregroundColor(.white)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(achievement.priority.color)
+                .cornerRadius(8)
+            }
+            
+            // 副本统计信息
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("成就总数")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\(achievement.calibratedStats.pieces.total)")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.blue)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("资历总数")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\(achievement.calibratedStats.seniority.total)")
+                        .font(.subheadline)
+                        .fontWeight(.bold)
+                        .foregroundColor(.orange)
+                }
+                
+                Spacer()
+                
+                if achievement.isCalibrated {
+                    HStack {
+                        Image(systemName: "checkmark.seal.fill")
+                            .foregroundColor(.green)
+                            .font(.caption)
+                        
+                        Text("已校验")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .fontWeight(.medium)
+                    }
+                }
+            }
+            
+            // 角色完成情况
+            VStack(alignment: .leading, spacing: 8) {
+                Text("各角色进度")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .fontWeight(.medium)
+                
+                ForEach(characters, id: \.id) { character in
+                    CharacterAchievementRow(
+                        character: character,
+                        achievement: achievement,
+                        achievementData: characterAchievementData[character]
+                    )
+                }
+            }
+            
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(12)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(achievement.priority.color.opacity(0.3), lineWidth: 1)
+        )
+        .onTapGesture {
+            withAnimation(.easeInOut, {
+                showingAchievementDetail = true
+            })
+        }
+        .sheet(isPresented: $showingAchievementDetail) {
+            AchievementDetailView(achievementData: achievement)
+        }
+    }
+}
+
+// MARK: - 角色成就行
+struct CharacterAchievementRow: View {
+    let character: GameCharacter
+    let achievement: DungeonAchievementData
+    let achievementData: AchievementData?
+    
+    private var completionRate: Double {
+        guard let achievementData = achievementData,
+              let dungeonStats = achievementData.data.dungeons[achievement.dungeonName]?[achievement.difficulty] else {
+            return 0
+        }
+        
+        return dungeonStats.pieces.total > 0 
+            ? Double(dungeonStats.pieces.speed) / Double(dungeonStats.pieces.total) * 100 
+            : 0
+    }
+    
+    private var completionText: String {
+        guard let achievementData = achievementData,
+              let dungeonStats = achievementData.data.dungeons[achievement.dungeonName]?[achievement.difficulty] else {
+            return "(0/0)"
+        }
+        
+        return "(\(dungeonStats.pieces.speed)/\(dungeonStats.pieces.total))"
+    }
+    
+    var body: some View {
+        HStack {
+            Text(character.name)
+                .font(.caption)
+                .fontWeight(.medium)
+                .frame(width: 60, alignment: .leading)
+            
+            ProgressView(value: completionRate / 100)
+                .progressViewStyle(LinearProgressViewStyle(tint: 
+                    completionRate < 30 ? .red : 
+                    completionRate < 60 ? .orange : .green))
+                .frame(height: 4)
+            
+            Text(completionText)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .frame(width: 50, alignment: .trailing)
+        }
+    }
+}
+
+// MARK: - 成就统计项
+struct AchievementStatItem: View {
+    let title: String
+    let value: String
+    let subtitle: String
+    let color: Color
+    
+    var body: some View {
+        VStack(spacing: 4) {
+            Text(title)
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            
+            HStack(alignment: .firstTextBaseline, spacing: 2) {
+                Text(value)
+                    .font(.title3)
+                    .fontWeight(.bold)
+                    .foregroundColor(color)
+                
+                if !subtitle.isEmpty {
+                    Text(subtitle)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity)
     }
 }

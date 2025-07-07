@@ -9,7 +9,6 @@ import SwiftUI
 
 // MARK: - 副本资历数据模型
 struct DungeonAchievementData: Identifiable {
-    let id = UUID()
     let dungeonName: String
     let difficulty: String
     let originalStats: DungeonStats
@@ -19,6 +18,10 @@ struct DungeonAchievementData: Identifiable {
     let completionRate: Double
     let potential: Int
     let priority: Priority
+    
+    var id: String {
+        return "\(dungeonName)-\(difficulty)"
+    }
     
     enum Priority: String, CaseIterable {
         case high = "高优先级"
@@ -38,6 +41,14 @@ struct DungeonAchievementData: Identifiable {
             case .high: return "flame.fill"
             case .medium: return "clock.fill"
             case .low: return "checkmark.circle.fill"
+            }
+        }
+        
+        var sortOrder: Int {
+            switch self {
+            case .high: return 0
+            case .medium: return 1
+            case .low: return 2
             }
         }
     }
@@ -89,6 +100,12 @@ struct AchievementAnalyzerView: View {
     private var completionStats: (completed: Int, total: Int) {
         let allAchievements = filteredAchievements.flatMap { $0.achievements }
         return AchievementCompletionService.shared.getCompletionStats(for: allAchievements)
+    }
+    
+    private var userMarkedStats: (userMarked: Int, total: Int) {
+        let allAchievements = filteredAchievements.flatMap { $0.achievements }
+        let userMarkedCount = allAchievements.filter { AchievementCompletionService.shared.isAchievementCompleted($0.id) }.count
+        return (userMarked: userMarkedCount, total: allAchievements.count)
     }
     
     var body: some View {
@@ -456,6 +473,17 @@ struct AchievementAnalyzerView: View {
                 .frame(height: 40)
             
             StatisticItem(
+                title: "用户标记",
+                value: "\(userMarkedStats.userMarked)/\(userMarkedStats.total)",
+                subtitle: "个",
+                color: .cyan,
+                icon: "person.crop.circle.fill.badge.checkmark"
+            )
+            
+            Divider()
+                .frame(height: 40)
+            
+            StatisticItem(
                 title: "高优先级",
                 value: "\(filteredAchievements.filter { $0.priority == .high }.count)",
                 subtitle: "个",
@@ -515,7 +543,7 @@ struct AchievementAnalyzerView: View {
     
     // MARK: - 数据加载
     private func loadData() {
-        // 首先尝试从缓存加载
+        // 首先尝试从缓存加载用户资历数据
         if let cachedData = AchievementCacheService.shared.loadCache(
             for: character.server,
             name: character.name
@@ -527,7 +555,7 @@ struct AchievementAnalyzerView: View {
             )
             self.hasLoaded = true
             
-            // 检查是否有成就数据进行校验
+            // 优先使用JX3Box成就数据缓存进行校验
             if let processedData = AchievementDataService.shared.getCachedAchievementData() {
                 self.processedAchievementData = processedData
                 performValidation(achievementData: cachedData, processedData: processedData)
@@ -535,7 +563,6 @@ struct AchievementAnalyzerView: View {
                 processData(cachedData)
             }
         } else {
-            // 如果没有缓存，则从网络加载
             refreshData()
         }
     }
@@ -563,7 +590,14 @@ struct AchievementAnalyzerView: View {
                     self.cacheTimestamp = Date()
                     self.isLoading = false
                     self.hasLoaded = true
-                    processData(data)
+                    
+                    // 如果有JX3Box成就数据缓存，自动进行校验
+                    if let processedData = AchievementDataService.shared.getCachedAchievementData() {
+                        self.processedAchievementData = processedData
+                        performValidation(achievementData: data, processedData: processedData)
+                    } else {
+                        processData(data)
+                    }
                 }
             } catch {
                 await MainActor.run {

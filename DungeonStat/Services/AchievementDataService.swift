@@ -197,7 +197,7 @@ enum PostfixValue: Codable {
     }
 }
 
-struct JX3BoxSubAchievement: Codable {
+struct JX3BoxSubAchievement: Codable, Hashable {
     let ID: Int
     let Name: String
     let Point: Int?  // 改为可选类型
@@ -216,7 +216,7 @@ struct JX3BoxPost: Codable {
 }
 
 // MARK: - 处理后的成就数据模型
-struct ProcessedAchievement: Codable, Identifiable {
+struct ProcessedAchievement: Codable, Identifiable, Hashable {
     let id: Int
     let name: String
     let note: String?
