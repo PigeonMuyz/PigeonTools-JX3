@@ -75,6 +75,61 @@ struct PanelAttributeInfo: Codable {
     let value: Double
 }
 
+// MARK: - Token Usage API Models
+struct TokenUsageResponse: Codable {
+    let code: Int
+    let msg: String
+    let data: TokenUsageData?
+    let time: Int
+}
+
+struct TokenUsageData: Codable {
+    let id: Int
+    let user: Int
+    let token: String
+    let host: String
+    let banned: String?
+    let level: Int
+    let num: Int
+    let limit: Int
+    let count: Int
+    let status: Int
+    let datetime: String
+}
+
+// MARK: - Achievement API Models
+struct AchievementResponse: Codable {
+    let code: Int
+    let msg: String
+    let data: AchievementData?
+    let time: Int
+}
+
+struct AchievementData: Codable {
+    let roleName: String
+    let serverName: String
+    let data: AchievementStatistics
+}
+
+struct AchievementStatistics: Codable {
+    let dungeons: [String: [String: DungeonStats]]
+}
+
+struct DungeonStats: Codable {
+    let seniority: SeniorityInfo
+    let pieces: PiecesInfo
+}
+
+struct SeniorityInfo: Codable {
+    let total: Int
+    let speed: Int
+}
+
+struct PiecesInfo: Codable {
+    let total: Int
+    let speed: Int
+}
+
 // MARK: - 网络服务
 class JX3APIService {
     static let shared = JX3APIService()
@@ -126,8 +181,6 @@ class JX3APIService {
             throw APIError.invalidURL
         }
         
-        // 打印请求地址
-        print("🌐 请求地址: \(url.absoluteString)")
         
         let (data, response) = try await URLSession.shared.data(from: url)
         
@@ -135,12 +188,6 @@ class JX3APIService {
             throw APIError.networkError
         }
         
-        print("📊 HTTP状态码: \(httpResponse.statusCode)")
-        
-        // 打印原始返回数据
-        if let responseString = String(data: data, encoding: .utf8) {
-            print("📦 原始返回数据: \(responseString)")
-        }
         
         guard httpResponse.statusCode == 200 else {
             throw APIError.networkError
@@ -149,17 +196,11 @@ class JX3APIService {
         let apiResponse: JX3APIDetailResponse
         do {
             apiResponse = try JSONDecoder().decode(JX3APIDetailResponse.self, from: data)
-            print("✅ 解码成功: \(apiResponse)")
         } catch {
-            print("❌ JSON解码失败: \(error)")
-            if let decodingError = error as? DecodingError {
-                print("📝 详细解码错误: \(decodingError)")
-            }
-            throw error
+            throw APIError.apiError("数据解析失败")
         }
         
         guard apiResponse.code == 200, let roleData = apiResponse.data else {
-            print("⚠️ API错误: code=\(apiResponse.code), msg=\(apiResponse.msg)")
             throw APIError.apiError(apiResponse.msg)
         }
         
@@ -253,5 +294,77 @@ class JX3APIService {
                 }
             )
         )
+    }
+    
+    // MARK: - Token Usage API
+    func fetchTokenUsage(token: String) async throws -> TokenUsageData {
+        guard !token.isEmpty else {
+            throw APIError.apiError("Token不能为空")
+        }
+        
+        let urlString = "https://seasun.nicemoe.cn/data/token/web/token?token=\(token)"
+        guard let url = URL(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.networkError
+        }
+        
+        let apiResponse = try JSONDecoder().decode(TokenUsageResponse.self, from: data)
+        
+        guard apiResponse.code == 200, let usageData = apiResponse.data else {
+            throw APIError.apiError(apiResponse.msg)
+        }
+        
+        return usageData
+    }
+    
+    // MARK: - Achievement API
+    func fetchAchievementData(server: String, name: String) async throws -> AchievementData {
+        guard !tokenV2.isEmpty else {
+            throw APIError.apiError("获取资历统计需要配置Token V2")
+        }
+        
+        let urlString = "https://www.jx3api.com/data/tuilan/achievement"
+        guard var urlComponents = URLComponents(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        urlComponents.queryItems = [
+            URLQueryItem(name: "server", value: server),
+            URLQueryItem(name: "name", value: name),
+            URLQueryItem(name: "class", value: "3"),
+            URLQueryItem(name: "subclass", value: "秘境"),
+            URLQueryItem(name: "token", value: tokenV2),
+            URLQueryItem(name: "ticket", value: ticket)
+        ]
+        
+        guard let url = urlComponents.url else {
+            throw APIError.invalidURL
+        }
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.networkError
+        }
+        
+        let apiResponse = try JSONDecoder().decode(AchievementResponse.self, from: data)
+        
+        guard apiResponse.code == 200, let achievementData = apiResponse.data else {
+            throw APIError.apiError(apiResponse.msg)
+        }
+        
+        return achievementData
     }
 }

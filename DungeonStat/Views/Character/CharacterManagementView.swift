@@ -339,6 +339,8 @@ struct CharacterManagementView: View {
     @State private var selectedCharactersForComparison: Set<GameCharacter> = []
     @State private var characterDetailData: CharacterDetailData?
     @State private var isLoadingDetail = false
+    @State private var showingAchievementAnalyzer = false
+    @State private var selectedCharacterForAchievement: GameCharacter?
     
     // 搜索和对比状态
     @State private var searchText = ""
@@ -440,6 +442,15 @@ struct CharacterManagementView: View {
                                     Image(systemName: "trash")
                                 }
                                 .tint(.red)
+
+                                // 副本资历统计按钮
+                                Button {
+                                    selectedCharacterForAchievement = gameCharacter
+                                    showingAchievementAnalyzer = true
+                                } label: {
+                                    Image(systemName: "star.circle")
+                                }
+                                .tint(.purple)
 
                                 // 查看详情按钮
                                 Button {
@@ -587,6 +598,11 @@ struct CharacterManagementView: View {
             }
             .sheet(isPresented: $showingAttributeComparison) {
                 AttributeComparisonSheet(characters: Array(selectedCharactersForComparison))
+            }
+            .sheet(isPresented: $showingAchievementAnalyzer) {
+                if let character = selectedCharacterForAchievement {
+                    AchievementAnalyzerView(character: character)
+                }
             }
         }
     }
