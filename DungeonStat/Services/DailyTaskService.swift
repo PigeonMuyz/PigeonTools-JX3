@@ -59,7 +59,8 @@ class DailyTaskService {
             tasks.append(DailyTask(
                 type: .war,
                 name: war,
-                refreshDate: refreshTime
+                refreshDate: refreshTime,
+                isCustom: false
             ))
         }
         
@@ -67,7 +68,8 @@ class DailyTaskService {
         tasks.append(DailyTask(
             type: .battle,
             name: "积分日常",
-            refreshDate: refreshTime
+            refreshDate: refreshTime,
+            isCustom: false
         ))
         
         // 牛车 - 有具体内容
@@ -75,7 +77,8 @@ class DailyTaskService {
             tasks.append(DailyTask(
                 type: .orecar,
                 name: orecar,
-                refreshDate: refreshTime
+                refreshDate: refreshTime,
+                isCustom: false
             ))
         }
         
@@ -83,14 +86,16 @@ class DailyTaskService {
         tasks.append(DailyTask(
             type: .luck,
             name: "家园祈福",
-            refreshDate: refreshTime
+            refreshDate: refreshTime,
+            isCustom: false
         ))
         
         // 跑商 - 固定任务，无具体目标
         tasks.append(DailyTask(
             type: .trade,
             name: "跑商",
-            refreshDate: refreshTime
+            refreshDate: refreshTime,
+            isCustom: false
         ))
         
         return tasks

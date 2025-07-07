@@ -16,7 +16,7 @@ struct JX3APIDetailResponse: Codable {
 }
 
 struct DetailedRoleData: Codable {
-    let zoneName: String
+    let zoneName: String?        // 修改为可选类型
     let serverName: String
     let roleName: String
     let roleId: String
@@ -99,17 +99,11 @@ class JX3APIService {
             throw APIError.apiError("请先在设置中配置JX3API令牌")
         }
         
-        // URL编码服务器名和角色名
-        guard let encodedServer = server.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed),
-              let encodedName = name.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) else {
-            throw APIError.invalidParameters
-        }
-        
-        // 构建URL参数
+        // 构建URL参数 - URLQueryItem会自动处理编码，不需要手动编码
         var urlComponents = URLComponents(string: "https://www.jx3api.com/data/role/attribute")!
         var queryItems = [
-            URLQueryItem(name: "server", value: encodedServer),
-            URLQueryItem(name: "name", value: encodedName)
+            URLQueryItem(name: "server", value: server),
+            URLQueryItem(name: "name", value: name)
         ]
         
         // 角色装备信息需要ticket和token v1
@@ -132,16 +126,40 @@ class JX3APIService {
             throw APIError.invalidURL
         }
         
+        // 打印请求地址
+        print("🌐 请求地址: \(url.absoluteString)")
+        
         let (data, response) = try await URLSession.shared.data(from: url)
         
-        guard let httpResponse = response as? HTTPURLResponse,
-              httpResponse.statusCode == 200 else {
+        guard let httpResponse = response as? HTTPURLResponse else {
             throw APIError.networkError
         }
         
-        let apiResponse = try JSONDecoder().decode(JX3APIDetailResponse.self, from: data)
-        print(apiResponse)
+        print("📊 HTTP状态码: \(httpResponse.statusCode)")
+        
+        // 打印原始返回数据
+        if let responseString = String(data: data, encoding: .utf8) {
+            print("📦 原始返回数据: \(responseString)")
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.networkError
+        }
+        
+        let apiResponse: JX3APIDetailResponse
+        do {
+            apiResponse = try JSONDecoder().decode(JX3APIDetailResponse.self, from: data)
+            print("✅ 解码成功: \(apiResponse)")
+        } catch {
+            print("❌ JSON解码失败: \(error)")
+            if let decodingError = error as? DecodingError {
+                print("📝 详细解码错误: \(decodingError)")
+            }
+            throw error
+        }
+        
         guard apiResponse.code == 200, let roleData = apiResponse.data else {
+            print("⚠️ API错误: code=\(apiResponse.code), msg=\(apiResponse.msg)")
             throw APIError.apiError(apiResponse.msg)
         }
         

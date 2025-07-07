@@ -144,6 +144,122 @@ class DailyTaskManager: ObservableObject {
         saveStoredTasks()
     }
     
+    // 通过任务ID切换任务完成状态（支持自定义任务）
+    @MainActor
+    func toggleTaskCompletionById(characterId: UUID, taskId: UUID) {
+        let todayString = CharacterDailyTasks.todayDateString()
+        
+        guard let characterIndex = characterDailyTasks.firstIndex(where: { 
+            $0.characterId == characterId && $0.date == todayString 
+        }) else { return }
+        
+        guard let taskIndex = characterDailyTasks[characterIndex].tasks.firstIndex(where: { 
+            $0.id == taskId 
+        }) else { return }
+        
+        characterDailyTasks[characterIndex].tasks[taskIndex].isCompleted.toggle()
+        
+        if characterDailyTasks[characterIndex].tasks[taskIndex].isCompleted {
+            characterDailyTasks[characterIndex].tasks[taskIndex].completedDate = Date()
+        } else {
+            characterDailyTasks[characterIndex].tasks[taskIndex].completedDate = nil
+        }
+        
+        // 强制触发UI更新
+        objectWillChange.send()
+        saveStoredTasks()
+    }
+    
+    // MARK: - 自定义任务操作
+    @MainActor
+    func addCustomTask(characterId: UUID, taskName: String) {
+        let todayString = CharacterDailyTasks.todayDateString()
+        let refreshTime = CharacterDailyTasks.getRefreshTime()
+        
+        // 查找或创建该角色今天的任务数据
+        if let index = characterDailyTasks.firstIndex(where: { $0.characterId == characterId && $0.date == todayString }) {
+            // 添加自定义任务到现有任务列表
+            let customTask = DailyTask(
+                type: .custom,
+                name: taskName,
+                refreshDate: refreshTime,
+                isCustom: true
+            )
+            characterDailyTasks[index].tasks.append(customTask)
+        } else {
+            // 创建新的任务数据，包含自定义任务
+            let customTask = DailyTask(
+                type: .custom,
+                name: taskName,
+                refreshDate: refreshTime,
+                isCustom: true
+            )
+            let characterTasks = CharacterDailyTasks(
+                characterId: characterId,
+                date: todayString,
+                tasks: [customTask]
+            )
+            characterDailyTasks.append(characterTasks)
+        }
+        
+        // 强制触发UI更新
+        objectWillChange.send()
+        saveStoredTasks()
+    }
+    
+    @MainActor
+    func deleteCustomTask(characterId: UUID, taskId: UUID) {
+        let todayString = CharacterDailyTasks.todayDateString()
+        
+        guard let characterIndex = characterDailyTasks.firstIndex(where: { 
+            $0.characterId == characterId && $0.date == todayString 
+        }) else { return }
+        
+        // 只允许删除自定义任务
+        characterDailyTasks[characterIndex].tasks.removeAll { task in
+            task.id == taskId && task.isCustom
+        }
+        
+        // 强制触发UI更新
+        objectWillChange.send()
+        saveStoredTasks()
+    }
+    
+    @MainActor
+    func editCustomTask(characterId: UUID, taskId: UUID, newName: String) {
+        let todayString = CharacterDailyTasks.todayDateString()
+        
+        guard let characterIndex = characterDailyTasks.firstIndex(where: { 
+            $0.characterId == characterId && $0.date == todayString 
+        }) else { return }
+        
+        guard let taskIndex = characterDailyTasks[characterIndex].tasks.firstIndex(where: { 
+            $0.id == taskId && $0.isCustom 
+        }) else { return }
+        
+        // 只允许编辑自定义任务的名称
+        characterDailyTasks[characterIndex].tasks[taskIndex].name = newName
+        
+        // 强制触发UI更新
+        objectWillChange.send()
+        saveStoredTasks()
+    }
+    
+    // MARK: - 自动刷新功能
+    @MainActor
+    func autoRefreshIfNeeded(for characters: [GameCharacter]) async {
+        // 检查是否需要刷新
+        if shouldRefresh() {
+            await refreshDailyTasks(for: characters)
+        }
+    }
+    
+    // 手动强制刷新
+    @MainActor
+    func forceRefresh(for characters: [GameCharacter]) async {
+        await refreshDailyTasks(for: characters)
+    }
+    
     // MARK: - 数据查询
     func getDailyTasks(for character: GameCharacter) -> [DailyTask] {
         let todayString = CharacterDailyTasks.todayDateString()

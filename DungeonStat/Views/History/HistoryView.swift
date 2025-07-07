@@ -12,6 +12,7 @@ struct HistoryView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @State private var showingAddManualRecord = false
     @State private var searchText = ""
+    @State private var selectedTab = 0
     
     // 过滤后的记录
     private var filteredRecords: [CompletionRecord] {
@@ -29,20 +30,43 @@ struct HistoryView: View {
     
     var body: some View {
         NavigationView {
-            List {
-                ForEach(filteredRecords) { record in
-                    NavigationLink(destination: DropManagementView(record: record)) {
-                        RecordRowView(record: record)
+            // 根据选中的模式显示内容
+            Group {
+                if selectedTab == 0 {
+                    // 副本历史
+                    List {
+                        ForEach(filteredRecords) { record in
+                            NavigationLink(destination: DropManagementView(record: record)) {
+                                RecordRowView(record: record)
+                            }
+                        }
+                        .onDelete(perform: deleteRecords)
+                    }
+                    .searchable(text: $searchText, prompt: "搜索副本、角色、周数或掉落...")
+                } else {
+                    // 任务历史
+                    TaskHistoryView()
+                }
+            }
+            .navigationTitle(selectedTab == 0 ? "副本历史" : "任务历史")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        selectedTab = selectedTab == 0 ? 1 : 0
+                    }) {
+                        HStack(spacing: 4) {
+                            Image(systemName: selectedTab == 0 ? "calendar.badge.checkmark" : "building.2.crop.circle")
+                            Text(selectedTab == 0 ? "任务历史" : "副本历史")
+                        }
+                        .foregroundColor(.blue)
                     }
                 }
-                .onDelete(perform: deleteRecords)
-            }
-            .navigationTitle("完成历史")
-            .searchable(text: $searchText, prompt: "搜索副本、角色、周数或掉落...")
-            .toolbar {
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("手动添加") {
-                        showingAddManualRecord = true
+                    if selectedTab == 0 {
+                        Button("手动添加") {
+                            showingAddManualRecord = true
+                        }
                     }
                 }
             }
@@ -226,6 +250,180 @@ struct DropTag: View {
         .padding(.vertical, 2)
         .background(drop.color.opacity(0.12))
         .cornerRadius(4)
+    }
+}
+
+// MARK: - 任务历史视图
+struct TaskHistoryView: View {
+    @EnvironmentObject var dungeonManager: DungeonManager
+    @State private var searchText = ""
+    
+    // 获取任务历史数据
+    private var taskHistoryRecords: [TaskHistoryRecord] {
+        var records: [TaskHistoryRecord] = []
+        
+        // 从日常任务管理器获取所有角色的任务数据
+        for characterTasks in dungeonManager.dailyTaskManager.characterDailyTasks {
+            let completedTasks = characterTasks.tasks.filter { $0.isCompleted }
+            
+            for task in completedTasks {
+                if let completedDate = task.completedDate,
+                   let character = dungeonManager.characters.first(where: { $0.id == characterTasks.characterId }) {
+                    records.append(TaskHistoryRecord(
+                        id: UUID(),
+                        character: character,
+                        taskName: task.name,
+                        taskType: task.type,
+                        completedDate: completedDate,
+                        date: characterTasks.date,
+                        isCustom: task.isCustom
+                    ))
+                }
+            }
+        }
+        
+        // 按完成时间倒序排列
+        return records.sorted { $0.completedDate > $1.completedDate }
+    }
+    
+    // 过滤后的任务历史记录
+    private var filteredTaskRecords: [TaskHistoryRecord] {
+        if searchText.isEmpty {
+            return taskHistoryRecords
+        } else {
+            return taskHistoryRecords.filter { record in
+                record.taskName.localizedCaseInsensitiveContains(searchText) ||
+                record.character.displayName.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+    
+    var body: some View {
+        List {
+            if filteredTaskRecords.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                        .font(.largeTitle)
+                        .foregroundColor(.gray)
+                    
+                    Text("暂无任务完成记录")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    Text("在任务台中完成任务后，完成记录将显示在这里")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                ForEach(filteredTaskRecords) { record in
+                    TaskHistoryRowView(record: record)
+                }
+            }
+        }
+        .searchable(text: $searchText, prompt: "搜索任务或角色名...")
+    }
+}
+
+// MARK: - 任务历史记录数据模型
+struct TaskHistoryRecord: Identifiable {
+    let id: UUID
+    let character: GameCharacter
+    let taskName: String
+    let taskType: DailyTaskType
+    let completedDate: Date
+    let date: String // 任务日期
+    let isCustom: Bool
+}
+
+// MARK: - 任务历史记录行视图
+struct TaskHistoryRowView: View {
+    let record: TaskHistoryRecord
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // 第一行：任务名称和完成时间
+            HStack {
+                HStack(spacing: 6) {
+                    Image(systemName: record.taskType.icon)
+                        .foregroundColor(taskTypeColor)
+                        .font(.caption)
+                    
+                    Text(record.taskName)
+                        .font(.headline)
+                        .fontWeight(.medium)
+                }
+                
+                Spacer()
+                
+                Text(record.completedDate, formatter: simpleDateFormatter)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            // 第二行：角色信息
+            HStack {
+                Text("\(record.character.server) - \(record.character.name)")
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                // 任务类型标签
+                HStack(spacing: 4) {
+                    if record.isCustom {
+                        Text("自定义")
+                            .font(.caption)
+                            .foregroundColor(.blue)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.blue.opacity(0.15))
+                            .cornerRadius(4)
+                    } else {
+                        Text("系统任务")
+                            .font(.caption)
+                            .foregroundColor(.green)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.green.opacity(0.15))
+                            .cornerRadius(4)
+                    }
+                }
+            }
+            
+            // 第三行：任务日期
+            HStack {
+                Text("任务日期: \(record.date)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("完成时间: \(formatTime(record.completedDate))")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+    
+    private var taskTypeColor: Color {
+        switch record.taskType.color {
+        case "red": return .red
+        case "blue": return .blue
+        case "orange": return .orange
+        case "green": return .green
+        case "purple": return .purple
+        default: return .gray
+        }
+    }
+    
+    private func formatTime(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "HH:mm"
+        return formatter.string(from: date)
     }
 }
 

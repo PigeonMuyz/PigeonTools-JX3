@@ -486,6 +486,16 @@ struct StatisticsView: View {
             }
             .navigationTitle("统计")
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    NavigationLink(destination: YearlyStatisticsView().environmentObject(dungeonManager)) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chart.bar.fill")
+                            Text("年统计")
+                        }
+                        .foregroundColor(.blue)
+                    }
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         dungeonManager.manualGameWeeklyReset()
@@ -541,6 +551,12 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingQuickStart) {
                 QuickStartView(isPresented: $showingQuickStart)
+            }
+            .onAppear {
+                // 自动刷新日常任务
+                Task {
+                    await dungeonManager.autoRefreshDailyTasksIfNeeded()
+                }
             }
         }
     }
@@ -734,7 +750,7 @@ struct DailyTasksCard: View {
                         .font(.headline)
                         .foregroundColor(.primary)
                     
-                    Text(taskProgressText)
+                    Text("查看任务完成情况")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -746,33 +762,57 @@ struct DailyTasksCard: View {
                 }) {
                     HStack(spacing: 4) {
                         Text("详情")
-                            .font(.caption)
+                            .font(.subheadline)
+                            .fontWeight(.medium)
                         Image(systemName: "chevron.right")
-                            .font(.caption2)
+                            .font(.caption)
                     }
-                    .foregroundColor(.blue)
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.blue)
+                    .cornerRadius(8)
                 }
             }
             
-            // 显示前3个角色的任务进度
+            // 简化显示：只显示角色数量和任务状态
             if !dungeonManager.characters.isEmpty {
-                VStack(spacing: 8) {
-                    ForEach(Array(dungeonManager.characters.prefix(3)), id: \.id) { character in
-                        DailyTaskProgressRow(character: character)
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("已配置角色")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                        Text("\(dungeonManager.characters.count) 个角色")
+                            .font(.caption)
+                            .foregroundColor(.blue)
                     }
                     
-                    if dungeonManager.characters.count > 3 {
-                        Text("还有 \(dungeonManager.characters.count - 3) 个角色...")
+                    Spacer()
+                    
+                    VStack(alignment: .trailing, spacing: 4) {
+                        Text("任务系统")
+                            .font(.subheadline)
+                            .foregroundColor(.primary)
+                        Text(systemStatusText)
                             .font(.caption)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(systemStatusColor)
                     }
                 }
+                .padding()
+                .background(Color(.systemBackground))
+                .cornerRadius(8)
             } else {
-                Text("请先添加角色")
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 20)
+                VStack(spacing: 12) {
+                    Image(systemName: "person.crop.circle.badge.plus")
+                        .font(.title)
+                        .foregroundColor(.gray)
+                    
+                    Text("请先添加角色")
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 20)
             }
         }
         .padding()
@@ -783,57 +823,21 @@ struct DailyTasksCard: View {
         }
     }
     
-    private var taskProgressText: String {
+    private var systemStatusText: String {
         let progress = dungeonManager.dailyTaskManager.getAllCharactersTasksProgress()
         if progress.total == 0 {
-            return "等待刷新任务数据"
+            return "等待刷新"
         } else {
-            return "全部进度: \(progress.completed)/\(progress.total)"
+            return "已激活"
         }
+    }
+    
+    private var systemStatusColor: Color {
+        let progress = dungeonManager.dailyTaskManager.getAllCharactersTasksProgress()
+        return progress.total == 0 ? .orange : .green
     }
 }
 
-struct DailyTaskProgressRow: View {
-    let character: GameCharacter
-    @EnvironmentObject var dungeonManager: DungeonManager
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            Text(character.name)
-                .font(.subheadline)
-                .foregroundColor(.primary)
-                .frame(width: 80, alignment: .leading)
-            
-            ProgressView(value: progressValue, total: 1.0)
-                .progressViewStyle(LinearProgressViewStyle(tint: progressColor))
-            
-            Text("\(completedCount)/\(totalCount)")
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .frame(width: 40, alignment: .trailing)
-        }
-    }
-    
-    private var completedCount: Int {
-        dungeonManager.dailyTaskManager.getCompletedTasksCount(for: character)
-    }
-    
-    private var totalCount: Int {
-        dungeonManager.dailyTaskManager.getTotalTasksCount(for: character)
-    }
-    
-    private var progressValue: Double {
-        guard totalCount > 0 else { return 0 }
-        return Double(completedCount) / Double(totalCount)
-    }
-    
-    private var progressColor: Color {
-        if totalCount == 0 { return .gray }
-        if completedCount == totalCount { return .green }
-        if completedCount > totalCount / 2 { return .orange }
-        return .blue
-    }
-}
 
 // MARK: - Dashboard 卡片组件
 struct AllInProgressTasksCard: View {
@@ -1249,6 +1253,403 @@ struct CharacterSummaryRow: View {
         dungeonManager.dungeons.reduce(0) { total, dungeon in
             total + dungeon.weeklyCount(for: character)
         }
+    }
+}
+
+// MARK: - 年统计视图
+struct YearlyStatisticsView: View {
+    @EnvironmentObject var dungeonManager: DungeonManager
+    @State private var selectedYear = Calendar.current.component(.year, from: Date())
+    
+    private var availableYears: [Int] {
+        var allDates: [Date] = dungeonManager.completionRecords.map { $0.completedDate }
+        allDates.append(contentsOf: getAllTaskCompletionRecords().map { $0.completedDate })
+        
+        let years = Set(allDates.compactMap { date in
+            Calendar.current.component(.year, from: date)
+        })
+        return Array(years).sorted(by: >)
+    }
+    
+    private var yearlyData: YearlyStatisticsData {
+        YearlyStatisticsData(year: selectedYear, dungeonManager: dungeonManager)
+    }
+    
+    var body: some View {
+        ScrollView {
+            VStack(spacing: 20) {
+                // 年份选择器
+                if !availableYears.isEmpty {
+                    VStack(spacing: 12) {
+                        HStack {
+                            Text("选择年份")
+                                .font(.headline)
+                            Spacer()
+                        }
+                        
+                        Picker("年份", selection: $selectedYear) {
+                            ForEach(availableYears, id: \.self) { year in
+                                Text("\(year)年").tag(year)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                    }
+                    .padding()
+                    .background(Color(.systemGray6))
+                    .cornerRadius(12)
+                }
+                
+                // 年度总览
+                YearlyOverviewCard(data: yearlyData)
+                
+                // 副本详细统计
+                if !yearlyData.dungeonSummaries.isEmpty {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("各副本年度统计")
+                            .font(.headline)
+                            .padding(.horizontal)
+                        
+                        ForEach(yearlyData.dungeonSummaries) { summary in
+                            YearlyDungeonSummaryCard(summary: summary)
+                        }
+                    }
+                }
+                
+                // 角色年度统计
+                if !yearlyData.characterSummaries.isEmpty {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text("各角色年度统计")
+                            .font(.headline)
+                            .padding(.horizontal)
+                        
+                        ForEach(yearlyData.characterSummaries) { summary in
+                            YearlyCharacterSummaryCard(summary: summary)
+                        }
+                    }
+                }
+                
+                if yearlyData.totalDungeonCompletions == 0 && yearlyData.totalTasksCompleted == 0 {
+                    VStack(spacing: 16) {
+                        Image(systemName: "calendar.badge.exclamationmark")
+                            .font(.system(size: 48))
+                            .foregroundColor(.gray)
+                        
+                        Text("\(selectedYear)年暂无统计数据")
+                            .font(.headline)
+                            .foregroundColor(.secondary)
+                        
+                        Text("完成一些副本或任务后，这里将显示年度统计")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 60)
+                }
+            }
+            .padding()
+        }
+        .onAppear {
+            if availableYears.isEmpty {
+                selectedYear = Calendar.current.component(.year, from: Date())
+            } else if !availableYears.contains(selectedYear) {
+                selectedYear = availableYears.first ?? Calendar.current.component(.year, from: Date())
+            }
+        }
+    }
+    
+    // 获取所有任务完成记录（模拟数据，实际需要从DailyTaskManager获取）
+    private func getAllTaskCompletionRecords() -> [TaskCompletionRecord] {
+        var records: [TaskCompletionRecord] = []
+        
+        for characterTasks in dungeonManager.dailyTaskManager.characterDailyTasks {
+            if let character = dungeonManager.characters.first(where: { $0.id == characterTasks.characterId }) {
+                for task in characterTasks.tasks {
+                    if task.isCompleted, let completedDate = task.completedDate {
+                        records.append(TaskCompletionRecord(
+                            character: character,
+                            taskName: task.type.displayName,
+                            completedDate: completedDate
+                        ))
+                    }
+                }
+            }
+        }
+        
+        return records
+    }
+}
+
+// MARK: - 年统计数据模型
+struct YearlyStatisticsData {
+    let year: Int
+    let totalDungeonCompletions: Int
+    let totalTasksCompleted: Int
+    let dungeonSummaries: [YearlyDungeonSummary]
+    let characterSummaries: [YearlyCharacterSummary]
+    
+    init(year: Int, dungeonManager: DungeonManager) {
+        self.year = year
+        
+        // 获取指定年份的所有副本完成记录
+        let yearRecords = dungeonManager.completionRecords.filter { record in
+            Calendar.current.component(.year, from: record.completedDate) == year
+        }
+        
+        self.totalDungeonCompletions = yearRecords.count
+        
+        // 获取指定年份的所有任务完成记录
+        var yearTaskRecords: [TaskCompletionRecord] = []
+        for characterTasks in dungeonManager.dailyTaskManager.characterDailyTasks {
+            if let character = dungeonManager.characters.first(where: { $0.id == characterTasks.characterId }) {
+                for task in characterTasks.tasks {
+                    if task.isCompleted, let completedDate = task.completedDate,
+                       Calendar.current.component(.year, from: completedDate) == year {
+                        yearTaskRecords.append(TaskCompletionRecord(
+                            character: character,
+                            taskName: task.type.displayName,
+                            completedDate: completedDate
+                        ))
+                    }
+                }
+            }
+        }
+        
+        self.totalTasksCompleted = yearTaskRecords.count
+        
+        // 生成副本统计摘要
+        let dungeonGroups = Dictionary(grouping: yearRecords) { $0.dungeonName }
+        self.dungeonSummaries = dungeonGroups.map { (dungeonName, records) in
+            let totalDuration = records.reduce(0) { $0 + $1.duration }
+            let averageTime = records.count > 0 ? totalDuration / Double(records.count) : 0
+            let characterCount = Set(records.map { "\($0.character.server)-\($0.character.name)" }).count
+            
+            return YearlyDungeonSummary(
+                dungeonName: dungeonName,
+                totalCompletions: records.count,
+                averageTime: averageTime,
+                participatingCharacters: characterCount,
+                year: year
+            )
+        }.sorted { $0.totalCompletions > $1.totalCompletions }
+        
+        // 生成角色统计摘要
+        let characterGroups = Dictionary(grouping: yearRecords) { record in
+            "\(record.character.server)-\(record.character.name)"
+        }
+        
+        self.characterSummaries = characterGroups.compactMap { (key, records) -> YearlyCharacterSummary? in
+            guard let firstRecord = records.first else { return nil }
+            
+            let taskCount = yearTaskRecords.filter { taskRecord in
+                "\(taskRecord.character.server)-\(taskRecord.character.name)" == key
+            }.count
+            
+            return YearlyCharacterSummary(
+                character: firstRecord.character,
+                dungeonCompletions: records.count,
+                taskCompletions: taskCount,
+                year: year
+            )
+        }.sorted { $0.dungeonCompletions + $0.taskCompletions > $1.dungeonCompletions + $1.taskCompletions }
+    }
+}
+
+struct TaskCompletionRecord {
+    let character: GameCharacter
+    let taskName: String
+    let completedDate: Date
+}
+
+struct YearlyDungeonSummary: Identifiable {
+    let id = UUID()
+    let dungeonName: String
+    let totalCompletions: Int
+    let averageTime: TimeInterval
+    let participatingCharacters: Int
+    let year: Int
+}
+
+struct YearlyCharacterSummary: Identifiable {
+    let id = UUID()
+    let character: GameCharacter
+    let dungeonCompletions: Int
+    let taskCompletions: Int
+    let year: Int
+}
+
+// MARK: - 年统计UI组件
+struct YearlyOverviewCard: View {
+    let data: YearlyStatisticsData
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("\(data.year)年度总览")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                Spacer()
+            }
+            
+            HStack(spacing: 16) {
+                OverviewMetric(
+                    title: "副本完成总数",
+                    value: "\(data.totalDungeonCompletions)",
+                    subtitle: "次",
+                    color: .blue
+                )
+                
+                OverviewMetric(
+                    title: "任务完成总数", 
+                    value: "\(data.totalTasksCompleted)",
+                    subtitle: "个",
+                    color: .green
+                )
+                
+                OverviewMetric(
+                    title: "涉及副本数",
+                    value: "\(data.dungeonSummaries.count)",
+                    subtitle: "个",
+                    color: .orange
+                )
+                
+                OverviewMetric(
+                    title: "活跃角色数",
+                    value: "\(data.characterSummaries.count)",
+                    subtitle: "个",
+                    color: .purple
+                )
+            }
+            
+            if data.totalDungeonCompletions > 0 || data.totalTasksCompleted > 0 {
+                let totalActivities = data.totalDungeonCompletions + data.totalTasksCompleted
+                Text(totalActivities >= 1000 ? "年度游戏活跃度：资深玩家" :
+                     totalActivities >= 500 ? "年度游戏活跃度：活跃玩家" :
+                     totalActivities >= 100 ? "年度游戏活跃度：普通玩家" : "年度游戏活跃度：偶尔上线")
+                    .font(.footnote)
+                    .foregroundColor(.secondary)
+                    .italic()
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+}
+
+struct YearlyDungeonSummaryCard: View {
+    let summary: YearlyDungeonSummary
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(summary.dungeonName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Text("\(summary.totalCompletions) 次")
+                    .font(.subheadline)
+                    .foregroundColor(.blue)
+                    .fontWeight(.medium)
+            }
+            
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("平均用时")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(formatDurationShort(summary.averageTime))
+                        .font(.subheadline)
+                        .foregroundColor(.orange)
+                        .fontWeight(.medium)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("参与角色")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("\(summary.participatingCharacters) 个")
+                        .font(.subheadline)
+                        .foregroundColor(.purple)
+                        .fontWeight(.medium)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("统计年份")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("\(summary.year)年")
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+        .padding(.horizontal)
+    }
+}
+
+struct YearlyCharacterSummaryCard: View {
+    let summary: YearlyCharacterSummary
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(summary.character.displayName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Text("总计 \(summary.dungeonCompletions + summary.taskCompletions)")
+                    .font(.subheadline)
+                    .foregroundColor(.green)
+                    .fontWeight(.medium)
+            }
+            
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("副本完成")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("\(summary.dungeonCompletions) 次")
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                        .fontWeight(.medium)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("任务完成")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text("\(summary.taskCompletions) 个")
+                        .font(.subheadline)
+                        .foregroundColor(.green)
+                        .fontWeight(.medium)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    Text("服务器")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Text(summary.character.server)
+                        .font(.subheadline)
+                        .foregroundColor(.gray)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+        .padding(.horizontal)
     }
 }
 

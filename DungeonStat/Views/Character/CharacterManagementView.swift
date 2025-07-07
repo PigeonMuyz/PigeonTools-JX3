@@ -878,9 +878,15 @@ struct CharacterInfoCard: View {
                         .font(.subheadline)
                         .foregroundColor(.blue)
                     
-                    Text("\(data.zoneName) - \(data.serverName)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    if let zoneName = data.zoneName {
+                        Text("\(zoneName) - \(data.serverName)")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    } else {
+                        Text(data.serverName)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                     
                     // 显示游戏模式（如果有的话）
                     if let gameMode = data.gameMode {

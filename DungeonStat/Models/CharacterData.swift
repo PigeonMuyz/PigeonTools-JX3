@@ -16,7 +16,7 @@ struct CharacterDetailData: Codable {
 }
 
 struct CharacterData: Codable {
-    let zoneName: String
+    let zoneName: String?        // 修改为可选类型
     let serverName: String
     let roleName: String
     let roleId: String

@@ -59,7 +59,7 @@ struct TaskOrientedWeeklyRowView: View {
                         .font(.headline)
                         .fontWeight(.semibold)
                     
-                    Text("\(report.startDate, formatter: gameWeekFormatter) - \(report.endDate, formatter: gameWeekFormatter)")
+                    Text("\(gameWeekFormatter.string(from: report.startDate)) - \(gameWeekFormatter.string(from: report.endDate))")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -147,11 +147,12 @@ struct WeeklyDetailView: View {
                 TaskOverviewCard(records: weekRecords)
                 
                 if !weekRecords.isEmpty {
-                    // 选项卡 - 新增掉落统计
+                    // 选项卡 - 保持原有的tab切换功能
                     Picker("统计类型", selection: $selectedTab) {
                         Text("角色完成情况").tag(0)
                         Text("副本耗时对比").tag(1)
                         Text("掉落统计").tag(2)
+                        Text("任务完成统计").tag(3)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
@@ -161,13 +162,15 @@ struct WeeklyDetailView: View {
                     case 0:
                         CharacterCompletionView(records: weekRecords)
                     case 1:
-                        DungeonTimeComparisonView(records: weekRecords)
+                        EnhancedDungeonTimeComparisonView(records: weekRecords, report: report)
                     case 2:
                         DropStatisticsView(
                             records: weekRecords,
                             recordsWithDrops: recordsWithDrops,
                             dungeonManager: dungeonManager
                         )
+                    case 3:
+                        WeeklyTaskCompletionView(report: report, dungeonManager: dungeonManager)
                     default:
                         EmptyView()
                     }
@@ -348,7 +351,7 @@ struct DropEventRow: View {
                         .background(Color.blue.opacity(0.15))
                         .cornerRadius(3)
                     
-                    Text(event.time, formatter: timeFormatter)
+                    Text(timeFormatter.string(from: event.time))
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -792,6 +795,381 @@ struct DropEvent: Identifiable {
     let dungeonName: String
     let runNumber: Int
     let time: Date
+}
+
+// MARK: - 任务完成统计视图
+struct WeeklyTaskCompletionView: View {
+    let report: DynamicWeeklyReport
+    let dungeonManager: DungeonManager
+    
+    private var weeklyTaskData: WeeklyTaskCompletionData {
+        WeeklyTaskCompletionData(report: report, dungeonManager: dungeonManager)
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            // 总览
+            WeeklyTaskOverviewCard(data: weeklyTaskData)
+            
+            if weeklyTaskData.hasTaskData {
+                // 角色任务完成详情
+                Text("各角色任务完成情况")
+                    .font(.headline)
+                    .padding(.horizontal)
+                
+                ForEach(weeklyTaskData.characterTaskSummaries) { summary in
+                    CharacterTaskCompletionCard(summary: summary)
+                }
+            } else {
+                VStack(spacing: 16) {
+                    Image(systemName: "calendar.badge.exclamationmark")
+                        .font(.system(size: 48))
+                        .foregroundColor(.gray)
+                    
+                    Text("本周暂无任务完成数据")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                    
+                    Text("在任务台中管理日常任务完成状态")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            }
+        }
+    }
+}
+
+// MARK: - 增强的副本耗时对比视图
+struct EnhancedDungeonTimeComparisonView: View {
+    let records: [CompletionRecord]
+    let report: DynamicWeeklyReport
+    
+    private var dungeonTimeData: [EnhancedDungeonTimeComparison] {
+        let grouped = Dictionary(grouping: records) { $0.dungeonName }
+        
+        let results = grouped.map { (dungeonName, dungeonRecords) -> EnhancedDungeonTimeComparison in
+            // 按角色分组
+            let characterGroups = Dictionary(grouping: dungeonRecords) { record in
+                "\(record.character.server)-\(record.character.name)"
+            }
+            
+            // 生成角色时间数据
+            let characterTimes = characterGroups.compactMap { (key, records) -> CharacterTimeData? in
+                guard let firstRecord = records.first else { return nil }
+                let averageTime = records.reduce(0) { $0 + $1.duration } / Double(records.count)
+                return CharacterTimeData(
+                    character: firstRecord.character,
+                    averageTime: averageTime,
+                    completions: records.count
+                )
+            }.sorted { $0.averageTime < $1.averageTime }
+            
+            // 计算全副本平均时间
+            let totalDuration = dungeonRecords.reduce(0) { $0 + $1.duration }
+            let totalCompletions = dungeonRecords.count
+            let globalAverageTime = totalCompletions > 0 ? totalDuration / Double(totalCompletions) : 0
+            
+            // 格式化时间段
+            let startDateStr = gameWeekFormatter.string(from: report.startDate)
+            let endDateStr = gameWeekFormatter.string(from: report.endDate)
+            let weekPeriod = "\(startDateStr) - \(endDateStr)"
+            
+            return EnhancedDungeonTimeComparison(
+                dungeonName: dungeonName,
+                characterTimes: characterTimes,
+                globalAverageTime: globalAverageTime,
+                totalCompletions: totalCompletions,
+                weekPeriod: weekPeriod
+            )
+        }
+        
+        return results.sorted { $0.dungeonName < $1.dungeonName }
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            Text("副本耗时对比分析")
+                .font(.headline)
+                .padding(.horizontal)
+            
+            ForEach(dungeonTimeData) { dungeonComparison in
+                EnhancedDungeonTimeCard(comparison: dungeonComparison)
+            }
+        }
+    }
+}
+
+// MARK: - 数据模型
+struct WeeklyTaskCompletionData {
+    let totalTasksCompleted: Int
+    let totalCharactersWithTasks: Int
+    let mostActiveCharacter: (character: GameCharacter, tasksCompleted: Int)?
+    let characterTaskSummaries: [CharacterTaskSummary]
+    let hasTaskData: Bool
+    
+    init(report: DynamicWeeklyReport, dungeonManager: DungeonManager) {
+        // 获取本周的任务完成数据
+        let weekStart = report.startDate
+        let weekEnd = report.endDate
+        
+        var characterTaskCounts: [String: (character: GameCharacter, count: Int)] = [:]
+        var totalCompleted = 0
+        
+        // 遍历所有角色的任务数据
+        for characterTasks in dungeonManager.dailyTaskManager.characterDailyTasks {
+            // 找到对应的角色
+            if let character = dungeonManager.characters.first(where: { $0.id == characterTasks.characterId }) {
+                let characterKey = "\(character.server)-\(character.name)"
+                
+                // 统计本周完成的任务数量
+                let completedTasks = characterTasks.tasks.filter { task in
+                    if let completedDate = task.completedDate {
+                        return completedDate >= weekStart && completedDate <= weekEnd && task.isCompleted
+                    }
+                    return false
+                }
+                
+                if !completedTasks.isEmpty {
+                    totalCompleted += completedTasks.count
+                    characterTaskCounts[characterKey] = (character, completedTasks.count)
+                }
+            }
+        }
+        
+        self.totalTasksCompleted = totalCompleted
+        self.totalCharactersWithTasks = characterTaskCounts.count
+        self.hasTaskData = totalCompleted > 0
+        
+        // 找到最活跃的角色
+        if let mostActive = characterTaskCounts.values.max(by: { $0.count < $1.count }) {
+            self.mostActiveCharacter = (character: mostActive.character, tasksCompleted: mostActive.count)
+        } else {
+            self.mostActiveCharacter = nil
+        }
+        
+        // 生成角色任务摘要
+        self.characterTaskSummaries = characterTaskCounts.values.map { (character, count) in
+            let startDateStr = gameWeekFormatter.string(from: weekStart)
+            let endDateStr = gameWeekFormatter.string(from: weekEnd)
+            let weekPeriod = "\(startDateStr) - \(endDateStr)"
+            
+            return CharacterTaskSummary(
+                character: character,
+                completedTasksCount: count,
+                weekPeriod: weekPeriod
+            )
+        }.sorted { $0.completedTasksCount > $1.completedTasksCount }
+    }
+}
+
+struct CharacterTaskSummary: Identifiable {
+    let id = UUID()
+    let character: GameCharacter
+    let completedTasksCount: Int
+    let weekPeriod: String
+}
+
+struct EnhancedDungeonTimeComparison: Identifiable {
+    let id = UUID()
+    let dungeonName: String
+    let characterTimes: [CharacterTimeData]
+    let globalAverageTime: TimeInterval
+    let totalCompletions: Int
+    let weekPeriod: String
+}
+
+// MARK: - UI组件
+struct WeeklyTaskOverviewCard: View {
+    let data: WeeklyTaskCompletionData
+    
+    var body: some View {
+        VStack(spacing: 16) {
+            HStack {
+                Text("任务完成总览")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                Spacer()
+            }
+            
+            HStack(spacing: 16) {
+                OverviewMetric(
+                    title: "总完成任务数",
+                    value: "\(data.totalTasksCompleted)",
+                    subtitle: "个",
+                    color: .blue
+                )
+                
+                OverviewMetric(
+                    title: "活跃角色数",
+                    value: "\(data.totalCharactersWithTasks)",
+                    subtitle: "个",
+                    color: .green
+                )
+                
+                if let mostActive = data.mostActiveCharacter {
+                    OverviewMetric(
+                        title: "最勤劳角色",
+                        value: mostActive.character.name,
+                        subtitle: "\(mostActive.tasksCompleted)个任务",
+                        color: .purple
+                    )
+                } else {
+                    OverviewMetric(
+                        title: "平均每角色",
+                        value: data.totalCharactersWithTasks > 0 ? String(format: "%.1f", Double(data.totalTasksCompleted) / Double(data.totalCharactersWithTasks)) : "0",
+                        subtitle: "个任务",
+                        color: .orange
+                    )
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+}
+
+struct CharacterTaskCompletionCard: View {
+    let summary: CharacterTaskSummary
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(summary.character.displayName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Text("完成 \(summary.completedTasksCount) 个任务")
+                    .font(.subheadline)
+                    .foregroundColor(.blue)
+                    .fontWeight(.medium)
+            }
+            
+            HStack {
+                Text("服务器: \(summary.character.server)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                
+                Spacer()
+                
+                Text("统计周期: \(summary.weekPeriod)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(10)
+        .padding(.horizontal)
+    }
+}
+
+struct EnhancedDungeonTimeCard: View {
+    let comparison: EnhancedDungeonTimeComparison
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            // 副本名称和总览
+            VStack(alignment: .leading, spacing: 8) {
+                Text(comparison.dungeonName)
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                HStack(spacing: 16) {
+                    HStack {
+                        Text("本周总完成次数:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text("\(comparison.totalCompletions)")
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.blue)
+                    }
+                    
+                    HStack {
+                        Text("本周平均用时:")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        Text(formatDurationShort(comparison.globalAverageTime))
+                            .font(.caption)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.orange)
+                    }
+                    
+                    Spacer()
+                }
+                
+                Text("统计周期: \(comparison.weekPeriod)")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            .padding(.horizontal)
+            
+            if comparison.characterTimes.count > 1 {
+                Chart(comparison.characterTimes) { timeData in
+                    BarMark(
+                        x: .value("角色", timeData.character.name),
+                        y: .value("平均耗时", timeData.averageTime / 60)
+                    )
+                    .foregroundStyle(.orange.gradient)
+                    .annotation(position: .top) {
+                        VStack(spacing: 2) {
+                            Text(formatDurationShort(timeData.averageTime))
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            Text("(\(timeData.completions)次)")
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
+                .frame(height: 150)
+                .padding(.horizontal)
+            }
+            
+            // 详细数据列表
+            VStack(spacing: 6) {
+                ForEach(comparison.characterTimes) { timeData in
+                    HStack {
+                        Text(timeData.character.name)
+                            .font(.subheadline)
+                        
+                        Spacer()
+                        
+                        Text("\(timeData.completions)次")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Text("平均 \(formatDurationShort(timeData.averageTime))")
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
+                            .fontWeight(.medium)
+                        
+                        // 与副本平均时间对比
+                        if comparison.totalCompletions > 1 {
+                            let difference = timeData.averageTime - comparison.globalAverageTime
+                            let isImprovement = difference < 0
+                            
+                            Text(isImprovement ? "快\(formatDurationShort(abs(difference)))" : "慢\(formatDurationShort(difference))")
+                                .font(.caption)
+                                .foregroundColor(isImprovement ? .green : .red)
+                                .fontWeight(.medium)
+                        }
+                    }
+                    .padding(.horizontal)
+                }
+            }
+        }
+        .padding(.vertical)
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
 }
 
 // MARK: - 全局格式化器别名（保持兼容性）

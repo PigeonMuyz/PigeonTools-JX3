@@ -476,4 +476,14 @@ class DungeonManager: ObservableObject {
         print("手动刷新日常任务...")
         await dailyTaskManager.refreshDailyTasks(for: characters)
     }
+    
+    // 自动检查并刷新日常任务
+    func autoRefreshDailyTasksIfNeeded() async {
+        await dailyTaskManager.autoRefreshIfNeeded(for: characters)
+    }
+    
+    // 强制刷新日常任务
+    func forceRefreshDailyTasks() async {
+        await dailyTaskManager.forceRefresh(for: characters)
+    }
 }

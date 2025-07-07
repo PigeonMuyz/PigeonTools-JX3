@@ -15,6 +15,15 @@ struct DailyTask: Identifiable, Codable, Hashable {
     var isCompleted: Bool = false
     var completedDate: Date?
     let refreshDate: Date // 刷新日期（每天7点）
+    let isCustom: Bool // 是否为自定义任务
+    
+    // 初始化器
+    init(type: DailyTaskType, name: String? = nil, refreshDate: Date, isCustom: Bool = false) {
+        self.type = type
+        self.name = name ?? type.displayName
+        self.refreshDate = refreshDate
+        self.isCustom = isCustom
+    }
     
     // MARK: - Hashable & Equatable
     func hash(into hasher: inout Hasher) {
@@ -33,6 +42,7 @@ enum DailyTaskType: String, CaseIterable, Codable {
     case orecar = "orecar"     // 牛车
     case luck = "luck"         // 家园祈福
     case trade = "trade"       // 跑商
+    case custom = "custom"     // 自定义任务
     
     var displayName: String {
         switch self {
@@ -41,6 +51,7 @@ enum DailyTaskType: String, CaseIterable, Codable {
         case .orecar: return "牛车"
         case .luck: return "家园祈福"
         case .trade: return "跑商"
+        case .custom: return "自定义任务"
         }
     }
     
@@ -51,6 +62,7 @@ enum DailyTaskType: String, CaseIterable, Codable {
         case .orecar: return "car.fill"
         case .luck: return "house.fill"
         case .trade: return "cart.fill"
+        case .custom: return "plus.circle.fill"
         }
     }
     
@@ -61,6 +73,7 @@ enum DailyTaskType: String, CaseIterable, Codable {
         case .orecar: return "purple"
         case .luck: return "green"
         case .trade: return "orange"
+        case .custom: return "gray"
         }
     }
 }
