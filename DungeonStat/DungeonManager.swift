@@ -15,6 +15,8 @@ class DungeonManager: ObservableObject {
     @Published var characters: [GameCharacter] = []
     @Published var selectedCharacter: GameCharacter?
     @Published var completionRecords: [CompletionRecord] = []
+    @Published var categories: [DungeonCategory] = []
+    @Published var collapsedCategories: Set<UUID> = []
     
     // 管理器实例
     private let persistenceManager = DataPersistenceManager.shared
@@ -33,6 +35,7 @@ class DungeonManager: ObservableObject {
 //        }
         
         loadData()
+        initializeCategorySystem()
         
         // 添加调试输出
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {

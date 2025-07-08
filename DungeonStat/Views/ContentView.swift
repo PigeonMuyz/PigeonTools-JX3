@@ -21,7 +21,7 @@ struct ContentView: View {
                 .environmentObject(dungeonManager)
                 .tabItem {
                     Image(systemName: "house")
-                    Text("任务台")
+                    Text("仪表盘")
                 }
                 .tag(0)
             
@@ -86,8 +86,17 @@ struct DungeonListView: View {
     var body: some View {
         NavigationView {
             List {
-                ForEach(Array(dungeonManager.dungeons.enumerated()), id: \.element.id) { index, dungeon in
-                    DungeonRowView(dungeon: dungeon, index: index)
+                ForEach(dungeonManager.getCategorizedDungeons(), id: \.category?.id) { categoryGroup in
+                    Section(header: CategoryHeaderView(category: categoryGroup.category)) {
+                        if !isCategoryCollapsed(categoryGroup.category) {
+                            ForEach(Array(categoryGroup.dungeons.enumerated()), id: \.element.id) { index, dungeon in
+                                DungeonRowView(dungeon: dungeon, index: dungeonManager.dungeons.firstIndex(where: { $0.id == dungeon.id }) ?? index)
+                                    .contextMenu {
+                                        CategoryContextMenu(dungeon: dungeon)
+                                    }
+                            }
+                        }
+                    }
                 }
                 .onDelete(perform: deleteDungeons)
             }
@@ -131,6 +140,11 @@ struct DungeonListView: View {
         for index in offsets {
             dungeonManager.deleteDungeon(at: index)
         }
+    }
+    
+    private func isCategoryCollapsed(_ category: DungeonCategory?) -> Bool {
+        let categoryId = category?.id ?? DungeonManager.uncategorizedId
+        return dungeonManager.isCategoryCollapsed(categoryId)
     }
 }
 
@@ -646,6 +660,122 @@ struct AddManualRecordView: View {
         }
         .onAppear {
             selectedCharacter = dungeonManager.selectedCharacter
+        }
+    }
+}
+
+// MARK: - 分类UI组件
+struct CategoryHeaderView: View {
+    let category: DungeonCategory?
+    @EnvironmentObject var dungeonManager: DungeonManager
+    
+    var body: some View {
+        Button(action: {
+            let categoryId = category?.id ?? DungeonManager.uncategorizedId
+            dungeonManager.toggleCategoryCollapse(categoryId)
+        }) {
+            HStack {
+                Image(systemName: "chevron.down")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                    .animation(.easeInOut(duration: 0.3), value: isCollapsed)
+                
+                if let category = category {
+                    Text(category.name)
+                        .font(.headline)
+                        .foregroundColor(.primary)
+                } else {
+                    Text("未分类")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+    
+    private var isCollapsed: Bool {
+        let categoryId = category?.id ?? DungeonManager.uncategorizedId
+        return dungeonManager.isCategoryCollapsed(categoryId)
+    }
+}
+
+struct CategoryContextMenu: View {
+    let dungeon: Dungeon
+    @EnvironmentObject var dungeonManager: DungeonManager
+    @State private var showingCategorySelector = false
+    @State private var showingCustomCategoryInput = false
+    @State private var customCategoryName = ""
+    
+    var body: some View {
+        Group {
+            Button("重新分类") {
+                showingCategorySelector = true
+            }
+            
+            Button("自定义分类") {
+                showingCustomCategoryInput = true
+            }
+            
+            Button("移除分类") {
+                dungeonManager.setDungeonCategory(dungeon, category: nil)
+            }
+        }
+        .sheet(isPresented: $showingCategorySelector) {
+            CategorySelectorView(dungeon: dungeon, isPresented: $showingCategorySelector)
+        }
+        .alert("自定义分类", isPresented: $showingCustomCategoryInput) {
+            TextField("分类名称", text: $customCategoryName)
+            Button("确定") {
+                dungeonManager.setDungeonCustomCategory(dungeon, categoryName: customCategoryName)
+                customCategoryName = ""
+            }
+            Button("取消", role: .cancel) {
+                customCategoryName = ""
+            }
+        }
+    }
+}
+
+struct CategorySelectorView: View {
+    let dungeon: Dungeon
+    @Binding var isPresented: Bool
+    @EnvironmentObject var dungeonManager: DungeonManager
+    
+    var body: some View {
+        NavigationView {
+            List {
+                ForEach(dungeonManager.categories.sorted(by: { $0.order < $1.order })) { category in
+                    Button(action: {
+                        dungeonManager.setDungeonCategory(dungeon, category: category)
+                        isPresented = false
+                    }) {
+                        HStack {
+                            Circle()
+                                .fill(Color(category.color ?? "gray"))
+                                .frame(width: 20, height: 20)
+                            Text(category.name)
+                                .foregroundColor(.primary)
+                            Spacer()
+                            if dungeonManager.getCategoryForDungeon(dungeon)?.id == category.id {
+                                Image(systemName: "checkmark")
+                                    .foregroundColor(.blue)
+                            }
+                        }
+                    }
+                }
+            }
+            .navigationTitle("选择分类")
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("取消") {
+                        isPresented = false
+                    }
+                }
+            }
         }
     }
 }

@@ -782,32 +782,37 @@ struct StatisticsView: View {
     }
 }
 
-// MARK: - 任务台页面（Dashboard）
+// MARK: - 仪表盘页面（Dashboard）
 struct DashboardView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @State private var showingQuickStart = false
     
     var body: some View {
         NavigationView {
-            ScrollView {
-                LazyVStack(spacing: 20) {
-                    // 全局进行中任务
-                    AllInProgressTasksCard()
-                    
-                    // 日常任务卡片
-                    DailyTasksCard()
-                    
-                    // 全局今日统计
-                    GlobalTodayStatsCard()
-                    
-                    // 角色分组显示（可选展开）
-                    if !dungeonManager.characters.isEmpty {
-                        CharacterBreakdownCard()
+            List {
+                // 周副本完成进度（圆形进度条）
+                Section {
+                    WeeklyProgressRow()
+                }
+                
+                // 全局数据统计
+                Section {
+                    GlobalStatsRows()
+                }
+                
+                // 全局进行中任务
+                Section {
+                    AllInProgressTasksRows()
+                }
+                
+                // 角色分组显示
+                if !dungeonManager.characters.isEmpty {
+                    Section {
+                        CharacterBreakdownRows()
                     }
                 }
-                .padding()
             }
-            .navigationTitle("任务台")
+            .navigationTitle("仪表盘")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
@@ -823,10 +828,7 @@ struct DashboardView: View {
                 QuickStartView(isPresented: $showingQuickStart)
             }
             .onAppear {
-                // 自动刷新日常任务
-                Task {
-                    await dungeonManager.autoRefreshDailyTasksIfNeeded()
-                }
+                // 初始化仪表盘
             }
         }
     }
@@ -1003,169 +1005,384 @@ struct QuickStartView: View {
     }
 }
 
-// MARK: - 日常任务卡片
-struct DailyTasksCard: View {
+
+
+struct InProgressTask {
+    let taskId: String
+    let dungeon: Dungeon
+    let character: GameCharacter
+    let dungeonIndex: Int
+}
+
+// MARK: - 周副本完成进度行
+struct WeeklyProgressRow: View {
     @EnvironmentObject var dungeonManager: DungeonManager
-    @State private var showingDailyTasksDetail = false
     
     var body: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Image(systemName: "calendar.badge.clock")
-                    .font(.title2)
-                    .foregroundColor(.blue)
+        HStack(spacing: 16) {
+            // 圆形进度条
+            ZStack {
+                Circle()
+                    .stroke(Color.gray.opacity(0.3), lineWidth: 8)
+                    .frame(width: 60, height: 60)
                 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("今日任务")
-                        .font(.headline)
+                Circle()
+                    .trim(from: 0, to: progressPercentage)
+                    .stroke(progressColor, style: StrokeStyle(lineWidth: 8, lineCap: .round))
+                    .frame(width: 60, height: 60)
+                    .rotationEffect(.degrees(-90))
+                    .animation(.easeInOut(duration: 1.0), value: progressPercentage)
+                
+                Text("\(Int(progressPercentage * 100))%")
+                    .font(.caption)
+                    .fontWeight(.bold)
+                    .foregroundColor(progressColor)
+            }
+            
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
+                    Text("本周完成")
+                        .font(.subheadline)
                         .foregroundColor(.primary)
-                    
-                    Text("查看任务完成情况")
+                    Spacer()
+                    Text("\(currentWeekCount)")
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.blue)
+                }
+                
+                HStack {
+                    Text("目标（上周）")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                    Spacer()
+                    Text("\(lastWeekCount)")
+                        .font(.caption)
+                        .foregroundColor(.orange)
+                }
+                
+                HStack {
+                    Text(differenceText)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(differenceColor)
+                    Spacer()
+                }
+            }
+        }
+        .padding(.vertical, 8)
+    }
+    
+    private var currentWeekCount: Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? now
+        
+        return dungeonManager.completionRecords.filter { record in
+            record.completedDate >= startOfWeek
+        }.count
+    }
+    
+    private var lastWeekCount: Int {
+        // 获取上周的周报告数据，与周统计页面保持一致
+        let calendar = Calendar.current
+        let now = Date()
+        
+        guard let currentWeekStart = calendar.dateInterval(of: .weekOfYear, for: now)?.start,
+              let lastWeekStart = calendar.date(byAdding: .weekOfYear, value: -1, to: currentWeekStart) else {
+            return 0
+        }
+        
+        // 查找对应的周报告
+        if let lastWeekReport = dungeonManager.availableGameWeeks.first(where: { report in
+            calendar.isDate(report.startDate, inSameDayAs: lastWeekStart)
+        }) {
+            // 使用与周统计相同的计算方式
+            let weekRecords = dungeonManager.completionRecords.filter { record in
+                record.completedDate >= lastWeekReport.startDate && record.completedDate <= lastWeekReport.endDate
+            }
+            return weekRecords.count
+        }
+        
+        // 如果没有找到对应的周报告，回退到原始计算方式
+        let lastWeekEnd = calendar.date(byAdding: .day, value: 6, to: lastWeekStart) ?? lastWeekStart
+        return dungeonManager.completionRecords.filter { record in
+            record.completedDate >= lastWeekStart && record.completedDate <= lastWeekEnd
+        }.count
+    }
+    
+    private var progressPercentage: CGFloat {
+        guard lastWeekCount > 0 else { return 0 }
+        return min(CGFloat(currentWeekCount) / CGFloat(lastWeekCount), 1.0)
+    }
+    
+    private var progressColor: Color {
+        if progressPercentage >= 1.0 {
+            return .green
+        } else if progressPercentage >= 0.7 {
+            return .blue
+        } else if progressPercentage >= 0.4 {
+            return .orange
+        } else {
+            return .red
+        }
+    }
+    
+    private var differenceText: String {
+        let difference = currentWeekCount - lastWeekCount
+        if difference > 0 {
+            return "超出 \(difference) 个"
+        } else if difference < 0 {
+            return "还差 \(abs(difference)) 个"
+        } else {
+            return "刚好达标"
+        }
+    }
+    
+    private var differenceColor: Color {
+        let difference = currentWeekCount - lastWeekCount
+        if difference > 0 {
+            return .green
+        } else if difference < 0 {
+            return .red
+        } else {
+            return .blue
+        }
+    }
+}
+
+// MARK: - 全局数据统计行
+struct GlobalStatsRows: View {
+    @EnvironmentObject var dungeonManager: DungeonManager
+    
+    var body: some View {
+        Group {
+            // 单个角色最高完成数
+            HStack {
+                Image(systemName: "person.crop.circle.fill.badge.checkmark")
+                    .foregroundColor(.green)
+                    .font(.title3)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("单角色最高")
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                    if let topCharacter = singleCharacterMaxInfo.character {
+                        Text(topCharacter.name)
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
                 }
                 
                 Spacer()
                 
-                Button(action: {
-                    showingDailyTasksDetail = true
-                }) {
-                    HStack(spacing: 4) {
-                        Text("详情")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
-                        Image(systemName: "chevron.right")
-                            .font(.caption)
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 16)
-                    .padding(.vertical, 8)
-                    .background(Color.blue)
-                    .cornerRadius(8)
-                }
+                Text("\(singleCharacterMaxInfo.count)")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.green)
             }
             
-            // 简化显示：只显示角色数量和任务状态
-            if !dungeonManager.characters.isEmpty {
-                HStack {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("已配置角色")
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                        Text("\(dungeonManager.characters.count) 个角色")
+            // 副本最高记录
+            HStack {
+                Image(systemName: "building.2.crop.circle.fill")
+                    .foregroundColor(.orange)
+                    .font(.title3)
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("副本最高记录")
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
+                    if let topDungeon = dungeonMaxCompletions.dungeon {
+                        Text(topDungeon.name)
                             .font(.caption)
-                            .foregroundColor(.blue)
-                    }
-                    
-                    Spacer()
-                    
-                    VStack(alignment: .trailing, spacing: 4) {
-                        Text("任务系统")
-                            .font(.subheadline)
-                            .foregroundColor(.primary)
-                        Text(systemStatusText)
-                            .font(.caption)
-                            .foregroundColor(systemStatusColor)
+                            .foregroundColor(.secondary)
                     }
                 }
-                .padding()
-                .background(Color(.systemBackground))
-                .cornerRadius(8)
-            } else {
-                VStack(spacing: 12) {
-                    Image(systemName: "person.crop.circle.badge.plus")
-                        .font(.title)
-                        .foregroundColor(.gray)
-                    
-                    Text("请先添加角色")
-                        .font(.body)
-                        .foregroundColor(.secondary)
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
+                
+                Spacer()
+                
+                Text("\(dungeonMaxCompletions.count)")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.orange)
+            }
+            
+            // 本周完成总数
+            HStack {
+                Image(systemName: "calendar.circle.fill")
+                    .foregroundColor(.blue)
+                    .font(.title3)
+                
+                Text("本周完成")
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text("\(globalWeeklyCompletedCount)")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.blue)
+            }
+            
+            // 总角色数
+            HStack {
+                Image(systemName: "person.3.fill")
+                    .foregroundColor(.purple)
+                    .font(.title3)
+                
+                Text("总角色数")
+                    .font(.subheadline)
+                    .foregroundColor(.primary)
+                
+                Spacer()
+                
+                Text("\(dungeonManager.characters.count)")
+                    .font(.title2)
+                    .fontWeight(.bold)
+                    .foregroundColor(.purple)
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-        .sheet(isPresented: $showingDailyTasksDetail) {
-            DailyTasksDetailView()
-        }
     }
     
-    private var systemStatusText: String {
-        let progress = dungeonManager.dailyTaskManager.getAllCharactersTasksProgress()
-        if progress.total == 0 {
-            return "等待刷新"
-        } else {
-            return "已激活"
+    // 单个角色最大完成数的详细信息
+    private var singleCharacterMaxInfo: (character: GameCharacter?, count: Int) {
+        var maxCount = 0
+        var topCharacter: GameCharacter?
+        
+        for character in dungeonManager.characters {
+            let characterCount = dungeonManager.completionRecords.filter { record in
+                record.character.id == character.id ||
+                (record.character.name == character.name && record.character.server == character.server)
+            }.count
+            
+            if characterCount > maxCount {
+                maxCount = characterCount
+                topCharacter = character
+            }
         }
+        
+        return (topCharacter, maxCount)
     }
     
-    private var systemStatusColor: Color {
-        let progress = dungeonManager.dailyTaskManager.getAllCharactersTasksProgress()
-        return progress.total == 0 ? .orange : .green
+    // 某副本的最大完成数
+    private var dungeonMaxCompletions: (dungeon: Dungeon?, count: Int) {
+        var maxCount = 0
+        var topDungeon: Dungeon?
+        
+        for dungeon in dungeonManager.dungeons {
+            let dungeonCount = dungeonManager.completionRecords.filter { record in
+                record.dungeonName == dungeon.name
+            }.count
+            
+            if dungeonCount > maxCount {
+                maxCount = dungeonCount
+                topDungeon = dungeon
+            }
+        }
+        
+        return (topDungeon, maxCount)
+    }
+    
+    // 本周完成数
+    private var globalWeeklyCompletedCount: Int {
+        var total = 0
+        for character in dungeonManager.characters {
+            for dungeon in dungeonManager.dungeons {
+                total += dungeon.weeklyCount(for: character)
+            }
+        }
+        return total
     }
 }
 
-
-// MARK: - Dashboard 卡片组件
-struct AllInProgressTasksCard: View {
+// MARK: - 进行中任务行
+struct AllInProgressTasksRows: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @State private var currentTime = Date()
     
     private let timer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            HStack {
-                Image(systemName: "play.circle.fill")
-                    .font(.title2)
-                    .foregroundColor(.orange)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("进行中任务")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    Text("所有角色正在进行的副本")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-                
-                Text("\(allInProgressTasks.count)")
-                    .font(.title2)
-                    .fontWeight(.bold)
-                    .foregroundColor(.orange)
-            }
-            
+        Group {
             if allInProgressTasks.isEmpty {
-                VStack(spacing: 12) {
+                HStack {
                     Image(systemName: "checkmark.circle")
-                        .font(.system(size: 50))
+                        .font(.title2)
                         .foregroundColor(.green)
                     
                     Text("当前没有进行中的任务")
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                     
-                    Text("所有角色都已完成当前副本")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Spacer()
                 }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 20)
+                .padding(.vertical, 8)
             } else {
                 ForEach(allInProgressTasks, id: \.taskId) { task in
-                    GlobalInProgressTaskRow(task: task, currentTime: currentTime)
+                    HStack(spacing: 12) {
+                        Image(systemName: "play.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.orange)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(task.dungeon.name)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                            
+                            HStack(spacing: 4) {
+                                Text(task.character.name)
+                                    .font(.caption)
+                                    .foregroundColor(.blue)
+                                Text("·")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                Text(task.character.server)
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Spacer()
+                        
+                        VStack(alignment: .trailing, spacing: 2) {
+                            if let startTime = task.dungeon.startTime(for: task.character) {
+                                Text(formatDuration(currentTime.timeIntervalSince(startTime)))
+                                    .font(.caption)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.orange)
+                            }
+                            
+                            HStack(spacing: 8) {
+                                Button(action: {
+                                    let originalCharacter = dungeonManager.selectedCharacter
+                                    dungeonManager.selectedCharacter = task.character
+                                    dungeonManager.cancelDungeon(at: task.dungeonIndex)
+                                    dungeonManager.selectedCharacter = originalCharacter
+                                }) {
+                                    Image(systemName: "xmark.circle.fill")
+                                        .foregroundColor(.red)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                                
+                                Button(action: {
+                                    let originalCharacter = dungeonManager.selectedCharacter
+                                    dungeonManager.selectedCharacter = task.character
+                                    dungeonManager.completeDungeon(at: task.dungeonIndex)
+                                    dungeonManager.selectedCharacter = originalCharacter
+                                }) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                }
+                                .buttonStyle(PlainButtonStyle())
+                            }
+                        }
+                    }
+                    .padding(.vertical, 4)
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
         .onReceive(timer) { _ in
             currentTime = Date()
         }
@@ -1195,206 +1412,14 @@ struct AllInProgressTasksCard: View {
     }
 }
 
-struct InProgressTask {
-    let taskId: String
-    let dungeon: Dungeon
-    let character: GameCharacter
-    let dungeonIndex: Int
-}
-
-struct GlobalInProgressTaskRow: View {
-    let task: InProgressTask
-    let currentTime: Date
-    @EnvironmentObject var dungeonManager: DungeonManager
-    @State private var showingCancelAlert = false
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(task.dungeon.name)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                
-                HStack(spacing: 8) {
-                    Text(task.character.name)
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                        .fontWeight(.medium)
-                    
-                    Text("·")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text(task.character.server)
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                if let startTime = task.dungeon.startTime(for: task.character) {
-                    Text("已进行 \(formatDuration(currentTime.timeIntervalSince(startTime)))")
-                        .font(.caption)
-                        .foregroundColor(.orange)
-                        .fontWeight(.medium)
-                }
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 8) {
-                Button(action: {
-                    showingCancelAlert = true
-                }) {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title3)
-                        .foregroundColor(.red)
-                }
-                .buttonStyle(PlainButtonStyle())
-                
-                Button(action: {
-                    let originalCharacter = dungeonManager.selectedCharacter
-                    dungeonManager.selectedCharacter = task.character
-                    dungeonManager.completeDungeon(at: task.dungeonIndex)
-                    dungeonManager.selectedCharacter = originalCharacter
-                }) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.title3)
-                        .foregroundColor(.green)
-                }
-                .buttonStyle(PlainButtonStyle())
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(Color(.systemBackground))
-        .cornerRadius(8)
-        .alert("取消副本", isPresented: $showingCancelAlert) {
-            Button("取消", role: .cancel) { }
-            Button("确认取消", role: .destructive) {
-                let originalCharacter = dungeonManager.selectedCharacter
-                dungeonManager.selectedCharacter = task.character
-                dungeonManager.cancelDungeon(at: task.dungeonIndex)
-                dungeonManager.selectedCharacter = originalCharacter
-            }
-        } message: {
-            Text("确定要取消 \(task.character.name) 正在进行的「\(task.dungeon.name)」吗？")
-        }
-    }
-}
-
-struct GlobalTodayStatsCard: View {
-    @EnvironmentObject var dungeonManager: DungeonManager
-    
-    var body: some View {
-        VStack(spacing: 16) {
-            HStack {
-                Image(systemName: "chart.bar.fill")
-                    .font(.title2)
-                    .foregroundColor(.green)
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("全局数据统计")
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                    
-                    Text("所有角色的完成情况")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-            }
-            
-            HStack(spacing: 0) {
-                GlobalStatItem(
-                    title: "今日完成",
-                    value: "\(globalTodayCompletedCount)",
-                    color: .green,
-                    icon: "checkmark.circle.fill"
-                )
-                
-                Divider()
-                    .frame(height: 40)
-                
-                GlobalStatItem(
-                    title: "本周完成", 
-                    value: "\(globalWeeklyCompletedCount)",
-                    color: .blue,
-                    icon: "calendar.circle.fill"
-                )
-                
-                Divider()
-                    .frame(height: 40)
-                
-                GlobalStatItem(
-                    title: "总角色数",
-                    value: "\(dungeonManager.characters.count)",
-                    color: .purple,
-                    icon: "person.3.fill"
-                )
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-    }
-    
-    private var globalTodayCompletedCount: Int {
-        let today = Date()
-        let filtered = dungeonManager.completionRecords.filter { record in
-            Calendar.current.isDate(record.completedDate, inSameDayAs: today)
-        }
-        
-        // 调试信息
-        print("全局今日完成数量: \(filtered.count)")
-        print("所有完成记录数量: \(dungeonManager.completionRecords.count)")
-        
-        return filtered.count
-    }
-    
-    private var globalWeeklyCompletedCount: Int {
-        var total = 0
-        for character in dungeonManager.characters {
-            for dungeon in dungeonManager.dungeons {
-                total += dungeon.weeklyCount(for: character)
-            }
-        }
-        return total
-    }
-}
-
-struct GlobalStatItem: View {
-    let title: String
-    let value: String
-    let color: Color
-    let icon: String
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title2)
-                .foregroundColor(color)
-            
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(color)
-            
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-        }
-        .frame(maxWidth: .infinity)
-    }
-}
-
-struct CharacterBreakdownCard: View {
+// MARK: - 角色分组行
+struct CharacterBreakdownRows: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @State private var isExpanded = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        Group {
+            // 展开/收起按钮
             Button(action: {
                 withAnimation(.easeInOut(duration: 0.3)) {
                     isExpanded.toggle()
@@ -1402,124 +1427,78 @@ struct CharacterBreakdownCard: View {
             }) {
                 HStack {
                     Image(systemName: "person.3.fill")
-                        .font(.title2)
+                        .font(.title3)
                         .foregroundColor(.blue)
                     
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("角色分组详情")
-                            .font(.headline)
-                            .foregroundColor(.primary)
-                        
-                        Text("点击查看各角色的详细数据")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
+                    Text("角色详情")
+                        .font(.subheadline)
+                        .foregroundColor(.primary)
                     
                     Spacer()
                     
                     Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.subheadline)
+                        .font(.caption)
                         .foregroundColor(.blue)
                 }
             }
             .buttonStyle(PlainButtonStyle())
             
+            // 角色列表
             if isExpanded {
                 ForEach(dungeonManager.characters) { character in
-                    CharacterSummaryRow(character: character)
+                    HStack(spacing: 12) {
+                        Image(systemName: "person.circle.fill")
+                            .font(.title3)
+                            .foregroundColor(.blue)
+                        
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(character.name)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                            
+                            Text("\(character.server) · \(character.school)")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        Spacer()
+                        
+                        HStack(spacing: 16) {
+                            VStack(alignment: .center, spacing: 2) {
+                                Text("\(inProgressCount(for: character))")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.orange)
+                                Text("进行中")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            VStack(alignment: .center, spacing: 2) {
+                                Text("\(weeklyCount(for: character))")
+                                    .font(.caption)
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.blue)
+                                Text("本周")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    .padding(.vertical, 2)
                 }
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(12)
-    }
-}
-
-struct CharacterSummaryRow: View {
-    let character: GameCharacter
-    @EnvironmentObject var dungeonManager: DungeonManager
-    
-    var body: some View {
-        HStack(spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(character.name)
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.primary)
-                
-                Text("\(character.server) · \(character.school)")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            }
-            
-            Spacer()
-            
-            HStack(spacing: 16) {
-                VStack(alignment: .center, spacing: 2) {
-                    Text("\(inProgressCount)")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.orange)
-                    Text("进行中")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                
-                VStack(alignment: .center, spacing: 2) {
-                    Text("\(todayCount)")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.green)
-                    Text("今日")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-                
-                VStack(alignment: .center, spacing: 2) {
-                    Text("\(weeklyCount)")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.blue)
-                    Text("本周")
-                        .font(.caption2)
-                        .foregroundColor(.secondary)
-                }
-            }
-        }
-        .padding(.vertical, 8)
-        .padding(.horizontal, 12)
-        .background(Color(.systemBackground))
-        .cornerRadius(8)
     }
     
-    private var inProgressCount: Int {
+    private func inProgressCount(for character: GameCharacter) -> Int {
         dungeonManager.dungeons.reduce(0) { total, dungeon in
             total + (dungeon.isInProgress(for: character) ? 1 : 0)
         }
     }
     
-    private var todayCount: Int {
-        let today = Date()
-        let filtered = dungeonManager.completionRecords.filter { record in
-            // 使用名字和服务器匹配，而不是只使用ID
-            (record.character.id == character.id ||
-             (record.character.name == character.name && record.character.server == character.server)) &&
-            Calendar.current.isDate(record.completedDate, inSameDayAs: today)
-        }
-        
-        // 调试信息
-        print("角色 \(character.name) 今日完成数量: \(filtered.count)")
-        let allRecords = dungeonManager.completionRecords.filter { 
-            $0.character.id == character.id ||
-            ($0.character.name == character.name && $0.character.server == character.server)
-        }
-        print("该角色所有记录: \(allRecords.count)")
-        
-        return filtered.count
-    }
-    
-    private var weeklyCount: Int {
+    private func weeklyCount(for character: GameCharacter) -> Int {
         dungeonManager.dungeons.reduce(0) { total, dungeon in
             total + dungeon.weeklyCount(for: character)
         }
