@@ -16,7 +16,6 @@ struct SettingsView: View {
     @AppStorage("jx3api_token") private var jx3ApiToken = ""
     @AppStorage("jx3api_tokenv2") private var jx3ApiTokenV2 = ""
     @AppStorage("jx3api_ticket") private var jx3ApiTicket = ""
-    @State private var showingCharacterManagement = false
     @State private var showingBackupManagement = false
     @State private var showingAPISettings = false
     @State private var showingAbout = false
@@ -24,63 +23,6 @@ struct SettingsView: View {
     var body: some View {
         NavigationView {
             List {
-                // 角色管理区域
-                Section(header: Text("角色管理")) {
-                    NavigationLink(destination: CharacterManagementView()) {
-                        HStack {
-                            Image(systemName: "person.3.fill")
-                                .foregroundColor(.blue)
-                                .frame(width: 24)
-                                .symbolEffect(.bounce, value: showingCharacterManagement)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("角色管理")
-                                    .font(.headline)
-                                Text("管理你的游戏角色")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            Text("\(dungeonManager.characters.count)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.gray.opacity(0.2))
-                                .cornerRadius(8)
-                        }
-                    }
-                    
-                    if let selectedCharacter = dungeonManager.selectedCharacter {
-                        HStack {
-                            Image(systemName: "person.crop.circle.fill")
-                                .foregroundColor(.green)
-                                .frame(width: 24)
-                            
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text("当前角色")
-                                    .font(.headline)
-                                Text(selectedCharacter.displayName)
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            Spacer()
-                            
-                            Button("切换") {
-                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                                impactFeedback.impactOccurred()
-                                
-                                showingCharacterManagement = true
-                            }
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                        }
-                    }
-                }
-                
                 // 数据管理区域
                 Section(header: Text("数据管理")) {
                     NavigationLink(destination: BackupManagementView()) {
@@ -189,9 +131,6 @@ struct SettingsView: View {
                 }
             }
             .navigationTitle("设置")
-            .sheet(isPresented: $showingCharacterManagement) {
-                CharacterSelectorView(isPresented: $showingCharacterManagement)
-            }
         }
     }
     
@@ -799,10 +738,16 @@ struct StatisticsView: View {
 struct DashboardView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @State private var showingQuickStart = false
+    @State private var showingCharacterSelector = false
     
     var body: some View {
         NavigationView {
             List {
+                // 欢迎回来区域
+                Section {
+                    WelcomeBackRow()
+                }
+                
                 // 周副本完成进度（圆形进度条）
                 Section {
                     WeeklyProgressRow()
@@ -839,6 +784,9 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showingQuickStart) {
                 QuickStartView(isPresented: $showingQuickStart)
+            }
+            .sheet(isPresented: $showingCharacterSelector) {
+                CharacterSelectorView(isPresented: $showingCharacterSelector)
             }
             .onAppear {
                 // 初始化仪表盘
@@ -1912,6 +1860,105 @@ struct YearlyCharacterSummaryCard: View {
         .background(Color(.systemGray6))
         .cornerRadius(10)
         .padding(.horizontal)
+    }
+}
+
+// MARK: - 欢迎回来行
+struct WelcomeBackRow: View {
+    @EnvironmentObject var dungeonManager: DungeonManager
+    @State private var showingCharacterSelector = false
+    
+    private var currentTime: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12:
+            return "早上好"
+        case 12..<14:
+            return "中午好"
+        case 14..<18:
+            return "下午好"
+        case 18..<22:
+            return "晚上好"
+        default:
+            return "深夜好"
+        }
+    }
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                if let selectedCharacter = dungeonManager.selectedCharacter {
+                    HStack(spacing: 8) {
+                        Text(currentTime + "，")
+                            .font(.title2)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                        
+                        Text(selectedCharacter.name)
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.blue)
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: "server.rack")
+                            .font(.caption)
+                            .foregroundColor(.orange)
+                        Text(selectedCharacter.server)
+                            .font(.subheadline)
+                            .foregroundColor(.orange)
+                        
+                        Text("·")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                        
+                        Image(systemName: "theatermasks.fill")
+                            .font(.caption)
+                            .foregroundColor(.purple)
+                        Text(selectedCharacter.school)
+                            .font(.subheadline)
+                            .foregroundColor(.purple)
+                    }
+                    
+                    HStack(spacing: 4) {
+                        Image(systemName: "hand.tap.fill")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Text("点击切换角色")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("欢迎回来！")
+                            .font(.title2)
+                            .fontWeight(.bold)
+                            .foregroundColor(.primary)
+                        
+                        HStack(spacing: 4) {
+                            Image(systemName: "person.crop.circle.badge.plus")
+                                .font(.caption)
+                                .foregroundColor(.blue)
+                            Text("点击选择角色")
+                                .font(.subheadline)
+                                .foregroundColor(.blue)
+                        }
+                    }
+                }
+            }
+            
+            Spacer()
+        }
+        .padding(.vertical, 8)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
+            showingCharacterSelector = true
+        }
+        .sheet(isPresented: $showingCharacterSelector) {
+            CharacterSelectorView(isPresented: $showingCharacterSelector)
+        }
     }
 }
 

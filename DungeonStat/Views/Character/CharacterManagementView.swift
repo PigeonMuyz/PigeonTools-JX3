@@ -351,267 +351,265 @@ struct CharacterManagementView: View {
     private var filteredCharacters: [GameCharacter] {
         dungeonManager.characters.filter { character in
             searchText.isEmpty ||
-                character.name.localizedCaseInsensitiveContains(searchText) ||
-                character.school.localizedCaseInsensitiveContains(searchText) ||
-                character.server.localizedCaseInsensitiveContains(searchText)
+            character.name.localizedCaseInsensitiveContains(searchText) ||
+            character.school.localizedCaseInsensitiveContains(searchText) ||
+            character.server.localizedCaseInsensitiveContains(searchText)
         }
     }
     
     var body: some View {
-        NavigationView {
-            VStack {
-                List {
-                    ForEach(filteredCharacters) { gameCharacter in
-                        VStack(alignment: .leading, spacing: 8) {
-                            // 角色名和选中状态 - 最突出
-                            HStack {
-                                Text(gameCharacter.name)
-                                    .font(.title2)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.primary)
-                                
-                                Spacer()
-                                
-                                if dungeonManager.selectedCharacter?.id == gameCharacter.id {
-                                    Text("当前选中")
-                                        .font(.caption)
-                                        .foregroundColor(.white)
-                                        .padding(.horizontal, 8)
-                                        .padding(.vertical, 3)
-                                        .background(Color.blue)
-                                        .clipShape(Capsule())
-                                }
-                                
-                                // 对比模式下的选择器
-                                if isComparisonMode {
-                                    if selectedCharactersForComparison.contains(gameCharacter) {
-                                        Image(systemName: "checkmark.circle.fill")
-                                            .foregroundColor(.green)
-                                            .onTapGesture {
-                                                selectedCharactersForComparison.remove(gameCharacter)
-                                            }
-                                    } else {
-                                        Image(systemName: "circle")
-                                            .foregroundColor(.gray)
-                                            .onTapGesture {
-                                                if selectedCharactersForComparison.count < 4 {
-                                                    selectedCharactersForComparison.insert(gameCharacter)
-                                                }
-                                            }
-                                    }
-                                }
-                            }
-                            
-                            // 服务器 - 次重要信息
-                            Text("服务器：\(gameCharacter.server)")
-                                .font(.subheadline)
-                                .foregroundColor(.blue)
-                                .fontWeight(.medium)
-                            
-                            // 门派和体型 - 紧凑水平布局
-                            HStack(spacing: 12) {
-                                Text("门派：\(gameCharacter.school)")
-                                    .font(.footnote)
-                                    .foregroundColor(.secondary)
-                                
-                                Text("体型：\(gameCharacter.bodyType)")
-                                    .font(.footnote)
-                                    .foregroundColor(.secondary)
-                                
-                                Spacer()
-                            }
-                        }
-                        .padding(.vertical, 4)
-                        .contentShape(Rectangle())
-                        .onTapGesture {
-                            if !isComparisonMode {
-                                dungeonManager.selectCharacter(gameCharacter)
-                            }
-                        }
-                        .onLongPressGesture {
-                            if !isComparisonMode {
-                                selectedCharacterForDetail = gameCharacter
-                                loadCharacterDetail(for: gameCharacter)
-                            }
-                        }
-                        .swipeActions(edge: .trailing, allowsFullSwipe: false) {
-                            if !isComparisonMode {
-                                // 删除按钮
-                                Button {
-                                    dungeonManager.deleteCharacter(gameCharacter)
-                                } label: {
-                                    Image(systemName: "trash")
-                                }
-                                .tint(.red)
-
-                                // 副本资历统计按钮
-                                Button {
-                                    selectedCharacterForAchievement = gameCharacter
-                                    showingAchievementAnalyzer = true
-                                } label: {
-                                    Image(systemName: "star.circle")
-                                }
-                                .tint(.purple)
-
-                                // 查看详情按钮
-                                Button {
-                                    selectedCharacterForDetail = gameCharacter
-                                    loadCharacterDetail(for: gameCharacter)
-                                } label: {
-                                    Image(systemName: "info.circle")
-                                }
-                                .tint(.blue)
-                            }
-                        }
-                    }
-                }
-                .searchable(text: $searchText, prompt: "搜索角色名、门派或服务器")
-                
-                // 对比模式底部栏
-                if isComparisonMode {
-                    VStack(spacing: 12) {
-                        if !selectedCharactersForComparison.isEmpty {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text("已选择 \(selectedCharactersForComparison.count) 个角色进行比较")
-                                        .font(.caption)
-                                        .foregroundColor(.secondary)
-                                    
-                                    Text(selectedCharactersForComparison.map { $0.name }.joined(separator: ", "))
-                                        .font(.caption2)
-                                        .foregroundColor(.blue)
-                                        .lineLimit(1)
-                                }
-                                
-                                Spacer()
-                                
-                                Button("清空") {
-                                    selectedCharactersForComparison.removeAll()
-                                }
-                                .font(.caption)
-                                .foregroundColor(.red)
-                                
-                                Button("属性比较") {
-                                    showingAttributeComparison = true
-                                }
-                                .font(.caption)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.blue)
-                                .clipShape(Capsule())
-                                .disabled(selectedCharactersForComparison.count < 2)
-                                
-                                Button("成就比较") {
-                                    showingAchievementComparison = true
-                                }
-                                .font(.caption)
-                                .foregroundColor(.white)
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 6)
-                                .background(Color.purple)
-                                .clipShape(Capsule())
-                                .disabled(selectedCharactersForComparison.count < 2)
-                            }
-                        } else {
-                            // 显示对比模式说明
-                            VStack(spacing: 8) {
-                                HStack {
-                                    Image(systemName: "info.circle.fill")
-                                        .foregroundColor(.blue)
-                                    Text("选择要对比的角色")
-                                        .font(.subheadline)
-                                        .fontWeight(.medium)
-                                        .foregroundColor(.primary)
-                                    Spacer()
-                                }
-                                
-                                Text("点击角色右侧的圆圈选择要对比的角色（2-4个），系统将自动比较所有角色的共同属性")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                    .multilineTextAlignment(.leading)
-                            }
-                            .padding(.horizontal, 16)
-                            .padding(.vertical, 12)
-                            .background(
-                                RoundedRectangle(cornerRadius: 8)
-                                    .fill(Color.blue.opacity(0.1))
-                                    .overlay(
-                                        RoundedRectangle(cornerRadius: 8)
-                                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
-                                    )
-                            )
-                        }
-                        
+        VStack {
+            List {
+                ForEach(filteredCharacters) { gameCharacter in
+                    VStack(alignment: .leading, spacing: 8) {
+                        // 角色名和选中状态 - 最突出
                         HStack {
-                            Button("取消") {
-                                isComparisonMode = false
-                                selectedCharactersForComparison.removeAll()
-                            }
-                            .font(.subheadline)
-                            .foregroundColor(.red)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
-                            .background(Color.red.opacity(0.1))
-                            .clipShape(Capsule())
+                            Text(gameCharacter.name)
+                                .font(.title2)
+                                .fontWeight(.bold)
+                                .foregroundColor(.primary)
                             
                             Spacer()
                             
-                            Text("对比模式")
-                                .font(.headline)
-                                .fontWeight(.semibold)
-                                .foregroundColor(.blue)
+                            if dungeonManager.selectedCharacter?.id == gameCharacter.id {
+                                Text("当前选中")
+                                    .font(.caption)
+                                    .foregroundColor(.white)
+                                    .padding(.horizontal, 8)
+                                    .padding(.vertical, 3)
+                                    .background(Color.blue)
+                                    .clipShape(Capsule())
+                            }
+                            
+                            // 对比模式下的选择器
+                            if isComparisonMode {
+                                if selectedCharactersForComparison.contains(gameCharacter) {
+                                    Image(systemName: "checkmark.circle.fill")
+                                        .foregroundColor(.green)
+                                        .onTapGesture {
+                                            selectedCharactersForComparison.remove(gameCharacter)
+                                        }
+                                } else {
+                                    Image(systemName: "circle")
+                                        .foregroundColor(.gray)
+                                        .onTapGesture {
+                                            if selectedCharactersForComparison.count < 4 {
+                                                selectedCharactersForComparison.insert(gameCharacter)
+                                            }
+                                        }
+                                }
+                            }
+                        }
+                        
+                        // 服务器 - 次重要信息
+                        Text("服务器：\(gameCharacter.server)")
+                            .font(.subheadline)
+                            .foregroundColor(.blue)
+                            .fontWeight(.medium)
+                        
+                        // 门派和体型 - 紧凑水平布局
+                        HStack(spacing: 12) {
+                            Text("门派：\(gameCharacter.school)")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                            
+                            Text("体型：\(gameCharacter.bodyType)")
+                                .font(.footnote)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
                         }
                     }
-                    .padding()
-                    .background(Color(.systemGray6))
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        if !isComparisonMode {
+                            dungeonManager.selectCharacter(gameCharacter)
+                        }
+                    }
+                    .onLongPressGesture {
+                        if !isComparisonMode {
+                            selectedCharacterForDetail = gameCharacter
+                            loadCharacterDetail(for: gameCharacter)
+                        }
+                    }
+                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                        if !isComparisonMode {
+                            // 删除按钮
+                            Button {
+                                dungeonManager.deleteCharacter(gameCharacter)
+                            } label: {
+                                Image(systemName: "trash")
+                            }
+                            .tint(.red)
+                            
+                            // 副本资历统计按钮
+                            Button {
+                                selectedCharacterForAchievement = gameCharacter
+                                showingAchievementAnalyzer = true
+                            } label: {
+                                Image(systemName: "star.circle")
+                            }
+                            .tint(.purple)
+                            
+                            // 查看详情按钮
+                            Button {
+                                selectedCharacterForDetail = gameCharacter
+                                loadCharacterDetail(for: gameCharacter)
+                            } label: {
+                                Image(systemName: "info.circle")
+                            }
+                            .tint(.blue)
+                        }
+                    }
                 }
             }
-            .navigationTitle("角色管理")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button {
-                        if isComparisonMode {
+            .searchable(text: $searchText, prompt: "搜索角色名、门派或服务器")
+            
+            // 对比模式底部栏
+            if isComparisonMode {
+                VStack(spacing: 12) {
+                    if !selectedCharactersForComparison.isEmpty {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text("已选择 \(selectedCharactersForComparison.count) 个角色进行比较")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                                
+                                Text(selectedCharactersForComparison.map { $0.name }.joined(separator: ", "))
+                                    .font(.caption2)
+                                    .foregroundColor(.blue)
+                                    .lineLimit(1)
+                            }
+                            
+                            Spacer()
+                            
+                            Button("清空") {
+                                selectedCharactersForComparison.removeAll()
+                            }
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            
+                            Button("属性比较") {
+                                showingAttributeComparison = true
+                            }
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.blue)
+                            .clipShape(Capsule())
+                            .disabled(selectedCharactersForComparison.count < 2)
+                            
+                            Button("成就比较") {
+                                showingAchievementComparison = true
+                            }
+                            .font(.caption)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.purple)
+                            .clipShape(Capsule())
+                            .disabled(selectedCharactersForComparison.count < 2)
+                        }
+                    } else {
+                        // 显示对比模式说明
+                        VStack(spacing: 8) {
+                            HStack {
+                                Image(systemName: "info.circle.fill")
+                                    .foregroundColor(.blue)
+                                Text("选择要对比的角色")
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.primary)
+                                Spacer()
+                            }
+                            
+                            Text("点击角色右侧的圆圈选择要对比的角色（2-4个），系统将自动比较所有角色的共同属性")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .multilineTextAlignment(.leading)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 12)
+                        .background(
+                            RoundedRectangle(cornerRadius: 8)
+                                .fill(Color.blue.opacity(0.1))
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 8)
+                                        .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                                )
+                        )
+                    }
+                    
+                    HStack {
+                        Button("取消") {
                             isComparisonMode = false
                             selectedCharactersForComparison.removeAll()
-                        } else {
-                            isComparisonMode = true
                         }
-                    } label: {
-                        Image(systemName: isComparisonMode ? "chart.bar.xaxis.descending" : "chart.bar.xaxis")
-                            .foregroundColor(isComparisonMode ? .blue : .primary)
+                        .font(.subheadline)
+                        .foregroundColor(.red)
+                        .padding(.horizontal, 20)
+                        .padding(.vertical, 10)
+                        .background(Color.red.opacity(0.1))
+                        .clipShape(Capsule())
+                        
+                        Spacer()
+                        
+                        Text("对比模式")
+                            .font(.headline)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.blue)
                     }
                 }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    HStack {
-                        Button("添加角色") {
-                            showingAddCharacter = true
-                        }
-                        .disabled(isComparisonMode)
+                .padding()
+                .background(Color(.systemGray6))
+            }
+        }
+        .navigationTitle("角色管理")
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button {
+                    if isComparisonMode {
+                        isComparisonMode = false
+                        selectedCharactersForComparison.removeAll()
+                    } else {
+                        isComparisonMode = true
                     }
+                } label: {
+                    Image(systemName: isComparisonMode ? "chart.bar.xaxis.descending" : "chart.bar.xaxis")
+                        .foregroundColor(isComparisonMode ? .blue : .primary)
                 }
             }
-            .sheet(isPresented: $showingAddCharacter) {
-                AddCharacterView(isPresented: $showingAddCharacter)
-            }
-            .sheet(isPresented: $showingCharacterDetail) {
-                CharacterDetailSheet(
-                    character: selectedCharacterForDetail,
-                    characterData: characterDetailData,
-                    isLoading: isLoadingDetail
-                )
-            }
-            .sheet(isPresented: $showingAttributeComparison) {
-                AttributeComparisonSheet(characters: Array(selectedCharactersForComparison))
-            }
-            .sheet(isPresented: $showingAchievementComparison) {
-                AchievementComparisonSheet(characters: Array(selectedCharactersForComparison))
-            }
-            .sheet(isPresented: $showingAchievementAnalyzer) {
-                if let character = selectedCharacterForAchievement {
-                    AchievementAnalyzerView(character: character)
+            
+            ToolbarItem(placement: .navigationBarTrailing) {
+                HStack {
+                    Button("添加角色") {
+                        showingAddCharacter = true
+                    }
+                    .disabled(isComparisonMode)
                 }
+            }
+        }
+        .sheet(isPresented: $showingAddCharacter) {
+            AddCharacterView(isPresented: $showingAddCharacter)
+        }
+        .sheet(isPresented: $showingCharacterDetail) {
+            CharacterDetailSheet(
+                character: selectedCharacterForDetail,
+                characterData: characterDetailData,
+                isLoading: isLoadingDetail
+            )
+        }
+        .sheet(isPresented: $showingAttributeComparison) {
+            AttributeComparisonSheet(characters: Array(selectedCharactersForComparison))
+        }
+        .sheet(isPresented: $showingAchievementComparison) {
+            AchievementComparisonSheet(characters: Array(selectedCharactersForComparison))
+        }
+        .sheet(isPresented: $showingAchievementAnalyzer) {
+            if let character = selectedCharacterForAchievement {
+                AchievementAnalyzerView(character: character)
             }
         }
     }
@@ -646,6 +644,9 @@ struct CharacterManagementView: View {
         }
     }
 }
+    
+    
+
 
 // MARK: - 属性比较Sheet
 struct AttributeComparisonSheet: View {

@@ -130,6 +130,96 @@ struct PiecesInfo: Codable {
     let speed: Int
 }
 
+// MARK: - Arena Battle Record API Models
+struct ArenaRecordResponse: Codable {
+    let code: Int
+    let msg: String
+    let data: ArenaRecordData?
+    let time: Int
+}
+
+struct ArenaRecordData: Codable {
+    let zoneName: String
+    let serverName: String
+    let roleName: String
+    let roleId: String
+    let globalRoleId: String
+    let forceName: String
+    let forceId: String
+    let bodyName: String
+    let bodyId: String
+    let tongName: String?
+    let tongId: String?
+    let campName: String
+    let campId: String
+    let personName: String
+    let personId: String
+    let personAvatar: String?
+    let performance: [String: ArenaPerformance]
+    let history: [ArenaHistoryRecord]
+    let trend: [ArenaTrendData]
+}
+
+struct ArenaPerformance: Codable {
+    let mmr: Int
+    let grade: Int
+    let ranking: String
+    let winCount: Int
+    let totalCount: Int
+    let mvpCount: Int
+    let pvpType: String
+    let winRate: Int
+}
+
+struct ArenaHistoryRecord: Codable {
+    let zone: String
+    let server: String
+    let avgGrade: Int
+    let totalMmr: Int
+    let mmr: Int
+    let kungfu: String
+    let pvpType: Int
+    let won: Bool
+    let mvp: Bool
+    let startTime: Int
+    let endTime: Int
+}
+
+struct ArenaTrendData: Codable {
+    let matchDate: Int
+    let mmr: Int
+    let winRate: Double
+}
+
+// MARK: - Arena Mode Enum
+enum ArenaMode: Int, CaseIterable {
+    case twoVTwo = 22
+    case threeVThree = 33
+    case fiveVFive = 55
+    
+    var displayName: String {
+        switch self {
+        case .twoVTwo:
+            return "2v2"
+        case .threeVThree:
+            return "3v3"
+        case .fiveVFive:
+            return "5v5"
+        }
+    }
+    
+    var apiKey: String {
+        switch self {
+        case .twoVTwo:
+            return "2v2"
+        case .threeVThree:
+            return "3v3"
+        case .fiveVFive:
+            return "5v5"
+        }
+    }
+}
+
 // MARK: - 网络服务
 class JX3APIService {
     static let shared = JX3APIService()
@@ -366,5 +456,55 @@ class JX3APIService {
         }
         
         return achievementData
+    }
+    
+    // MARK: - Arena Battle Record API
+    func fetchArenaRecord(server: String, name: String, mode: ArenaMode) async throws -> ArenaRecordData {
+        guard !token.isEmpty || !ticket.isEmpty else {
+            throw APIError.apiError("获取名剑大会战绩需要配置Token V1和Ticket")
+        }
+        
+        let urlString = "https://www.jx3api.com/data/arena/recent"
+        guard var urlComponents = URLComponents(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        var queryItems = [
+            URLQueryItem(name: "server", value: server),
+            URLQueryItem(name: "name", value: name),
+            URLQueryItem(name: "mode", value: String(mode.rawValue))
+        ]
+        
+        if !token.isEmpty {
+            queryItems.append(URLQueryItem(name: "token", value: token))
+        }
+        
+        if !ticket.isEmpty {
+            queryItems.append(URLQueryItem(name: "ticket", value: ticket))
+        }
+        
+        urlComponents.queryItems = queryItems
+        
+        guard let url = urlComponents.url else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.networkError
+        }
+        
+        let apiResponse = try JSONDecoder().decode(ArenaRecordResponse.self, from: data)
+        
+        guard apiResponse.code == 200, let arenaData = apiResponse.data else {
+            throw APIError.apiError(apiResponse.msg)
+        }
+        
+        return arenaData
     }
 }
