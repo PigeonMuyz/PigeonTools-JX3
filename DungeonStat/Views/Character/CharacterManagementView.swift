@@ -585,12 +585,6 @@ struct CharacterManagementView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     HStack {
-                        NavigationLink(destination: BackupManagementView().environmentObject(dungeonManager)) {
-                            Image(systemName: "externaldrive.fill")
-                                .foregroundColor(.orange)
-                        }
-                        .disabled(isComparisonMode)
-                        
                         Button("添加角色") {
                             showingAddCharacter = true
                         }

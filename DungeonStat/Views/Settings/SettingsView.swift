@@ -31,6 +31,7 @@ struct SettingsView: View {
                             Image(systemName: "person.3.fill")
                                 .foregroundColor(.blue)
                                 .frame(width: 24)
+                                .symbolEffect(.bounce, value: showingCharacterManagement)
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("角色管理")
@@ -69,6 +70,9 @@ struct SettingsView: View {
                             Spacer()
                             
                             Button("切换") {
+                                let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                                impactFeedback.impactOccurred()
+                                
                                 showingCharacterManagement = true
                             }
                             .font(.caption)
@@ -84,6 +88,7 @@ struct SettingsView: View {
                             Image(systemName: "icloud.and.arrow.up")
                                 .foregroundColor(.purple)
                                 .frame(width: 24)
+                                .symbolEffect(.bounce, value: showingBackupManagement)
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("备份管理")
@@ -154,6 +159,7 @@ struct SettingsView: View {
                             if hasAPITokens {
                                 Image(systemName: "checkmark.circle.fill")
                                     .foregroundColor(.green)
+                                    .symbolEffect(.bounce, value: hasAPITokens)
                             } else {
                                 Image(systemName: "exclamationmark.circle.fill")
                                     .foregroundColor(.orange)
@@ -169,6 +175,7 @@ struct SettingsView: View {
                             Image(systemName: "info.circle")
                                 .foregroundColor(.blue)
                                 .frame(width: 24)
+                                .symbolEffect(.bounce, value: showingAbout)
                             
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("关于应用")
@@ -277,6 +284,9 @@ struct APISettingsView: View {
             
             Section(header: Text("操作")) {
                 Button("刷新所有Token用量") {
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                    impactFeedback.impactOccurred()
+                    
                     Task {
                         await refreshAllTokenUsage()
                     }
@@ -284,6 +294,9 @@ struct APISettingsView: View {
                 .disabled(jx3ApiToken.isEmpty && jx3ApiTokenV2.isEmpty)
                 
                 Button("清除所有配置") {
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                    impactFeedback.impactOccurred()
+                    
                     jx3ApiToken = ""
                     jx3ApiTokenV2 = ""
                     jx3ApiTicket = ""
@@ -818,7 +831,7 @@ struct DashboardView: View {
                     Button(action: {
                         showingQuickStart = true
                     }) {
-                        Image(systemName: "plus.circle.fill")
+                        Image(systemName: "plus")
                             .font(.title2)
                             .foregroundColor(.blue)
                     }

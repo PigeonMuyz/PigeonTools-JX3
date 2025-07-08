@@ -14,13 +14,14 @@ struct ContentView: View {
     @StateObject private var dungeonManager = DungeonManager()
     @State private var selectedTab = 0
     @State private var hasEverHadTasks = false
+    @State private var previousTab = 0
     
     var body: some View {
         TabView(selection: $selectedTab) {
             DashboardView()
                 .environmentObject(dungeonManager)
                 .tabItem {
-                    Image(systemName: "house")
+                    TabBarIcon(systemName: "house", isSelected: selectedTab == 0)
                     Text("仪表盘")
                 }
                 .tag(0)
@@ -28,7 +29,7 @@ struct ContentView: View {
             DungeonListView()
                 .environmentObject(dungeonManager)
                 .tabItem {
-                    Image(systemName: "list.bullet")
+                    TabBarIcon(systemName: "list.bullet", isSelected: selectedTab == 1)
                     Text("副本")
                 }
                 .tag(1)
@@ -36,7 +37,7 @@ struct ContentView: View {
             HistoryView()
                 .environmentObject(dungeonManager)
                 .tabItem {
-                    Image(systemName: "clock")
+                    TabBarIcon(systemName: "clock", isSelected: selectedTab == 2)
                     Text("历史")
                 }
                 .tag(2)
@@ -44,7 +45,7 @@ struct ContentView: View {
             StatisticsView()
                 .environmentObject(dungeonManager)
                 .tabItem {
-                    Image(systemName: "chart.bar")
+                    TabBarIcon(systemName: "chart.bar", isSelected: selectedTab == 3)
                     Text("统计")
                 }
                 .tag(3)
@@ -52,10 +53,17 @@ struct ContentView: View {
             SettingsView()
                 .environmentObject(dungeonManager)
                 .tabItem {
-                    Image(systemName: "gearshape")
+                    TabBarIcon(systemName: "gearshape", isSelected: selectedTab == 4)
                     Text("设置")
                 }
                 .tag(4)
+        }
+        .animation(.easeInOut(duration: 0.3), value: selectedTab)
+        .onChange(of: selectedTab) { oldValue, newValue in
+            previousTab = oldValue
+            // 添加触觉反馈
+            let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+            impactFeedback.impactOccurred()
         }
         .onAppear {
             // 初始化时检查是否有任务
@@ -389,27 +397,39 @@ struct DungeonRowView: View {
             HStack(spacing: 8) {
                 // 取消按钮
                 Button(action: {
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                    impactFeedback.impactOccurred()
+                    
                     showingCancelAlert = true
                 }) {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
                         .foregroundColor(.red)
+                        .scaleEffect(1.0)
+                        .animation(.easeInOut(duration: 0.15), value: showingCancelAlert)
                 }
                 .buttonStyle(PlainButtonStyle())
                 
                 // 完成按钮
                 Button(action: {
+                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                    impactFeedback.impactOccurred()
+                    
                     dungeonManager.completeDungeon(at: index)
                 }) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.title2)
                         .foregroundColor(.green)
+                        .scaleEffect(1.0)
                 }
                 .buttonStyle(PlainButtonStyle())
             }
         } else {
             // 开始按钮
             Button(action: {
+                let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                impactFeedback.impactOccurred()
+                
                 dungeonManager.startDungeon(at: index)
             }) {
                 HStack(spacing: 4) {
@@ -422,6 +442,7 @@ struct DungeonRowView: View {
                 .foregroundColor(.blue)
             }
             .buttonStyle(PlainButtonStyle())
+            .scaleEffect(1.0)
         }
     }
     
@@ -527,6 +548,7 @@ struct CharacterSelectorView: View {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.title2)
                                     .foregroundColor(.blue)
+                                    .symbolEffect(.bounce.up, value: dungeonManager.selectedCharacter?.id == gameCharacter.id)
                             } else {
                                 Image(systemName: "circle")
                                     .font(.title2)
@@ -556,6 +578,9 @@ struct CharacterSelectorView: View {
                     .padding(.vertical, 4)
                     .contentShape(Rectangle())
                     .onTapGesture {
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                        impactFeedback.impactOccurred()
+                        
                         dungeonManager.selectCharacter(gameCharacter)
                         isPresented = false
                     }
@@ -679,7 +704,8 @@ struct CategoryHeaderView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
                     .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                    .animation(.easeInOut(duration: 0.3), value: isCollapsed)
+                    .symbolEffect(.bounce, value: isCollapsed)
+                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isCollapsed)
                 
                 if let category = category {
                     Text(category.name)
@@ -784,3 +810,17 @@ struct CategorySelectorView: View {
 private let dateFormatter = DateFormatters.dateFormatter
 private let dateTimeFormatter = DateFormatters.dateTimeFormatter
 private let gameWeekFormatter = DateFormatters.gameWeekFormatter
+
+// MARK: - TabBar图标动画组件
+struct TabBarIcon: View {
+    let systemName: String
+    let isSelected: Bool
+    
+    var body: some View {
+        Image(systemName: systemName)
+            .symbolEffect(.bounce, value: isSelected)
+            .symbolVariant(isSelected ? .fill : .none)
+            .scaleEffect(isSelected ? 1.1 : 1.0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.6, blendDuration: 0), value: isSelected)
+    }
+}
