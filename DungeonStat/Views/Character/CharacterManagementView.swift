@@ -342,6 +342,8 @@ struct CharacterManagementView: View {
     @State private var isLoadingDetail = false
     @State private var showingAchievementAnalyzer = false
     @State private var selectedCharacterForAchievement: GameCharacter?
+    @State private var showingCharacterCard = false
+    @State private var selectedCharacterForCard: GameCharacter?
     
     // 搜索和对比状态
     @State private var searchText = ""
@@ -460,6 +462,18 @@ struct CharacterManagementView: View {
                                 Image(systemName: "info.circle")
                             }
                             .tint(.blue)
+                        }
+                    }
+                    .swipeActions(edge: .leading, allowsFullSwipe: false) {
+                        if !isComparisonMode {
+                            // 角色名片按钮
+                            Button {
+                                selectedCharacterForCard = gameCharacter
+                                showingCharacterCard = true
+                            } label: {
+                                Image(systemName: "person.crop.rectangle")
+                            }
+                            .tint(.green)
                         }
                     }
                 }
@@ -610,6 +624,11 @@ struct CharacterManagementView: View {
         .sheet(isPresented: $showingAchievementAnalyzer) {
             if let character = selectedCharacterForAchievement {
                 AchievementAnalyzerView(character: character)
+            }
+        }
+        .sheet(isPresented: $showingCharacterCard) {
+            if let character = selectedCharacterForCard {
+                CharacterCardView(server: character.server, name: character.name)
             }
         }
     }

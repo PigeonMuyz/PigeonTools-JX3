@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import SafariServices
 
 // MARK: - 副本资历数据模型
 struct DungeonAchievementData: Identifiable {
@@ -530,11 +531,7 @@ struct AchievementAnalyzerView: View {
             } else {
                 LazyVStack(spacing: 12) {
                     ForEach(filteredAchievements) { achievement in
-                        AchievementSuggestionCard(achievement: achievement)
-                            .onTapGesture {
-                                selectedAchievementData = achievement
-                                showingAchievementDetail = true
-                            }
+                        AchievementSuggestionCard(achievement: achievement, character: character)
                     }
                 }
             }
@@ -754,6 +751,11 @@ struct StatisticItem: View {
 // MARK: - 成就建议卡片
 struct AchievementSuggestionCard: View {
     let achievement: DungeonAchievementData
+    let character: GameCharacter
+    @State private var showingDungeonDetailQuery = false
+    @State private var isQuerying = false
+    @State private var queryResult: DungeonAchievementQueryCache?
+    @StateObject private var detailService = DungeonAchievementDetailService.shared
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -864,6 +866,30 @@ struct AchievementSuggestionCard: View {
                     achievement.completionRate < 30 ? .red : 
                     achievement.completionRate < 60 ? .orange : .green))
                 .frame(height: 4)
+            
+            // 显示查询状态
+            if isQuerying {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("正在查询详细成就...")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                    Spacer()
+                }
+                .padding(.top, 8)
+            } else if let cached = getCachedQuery() {
+                HStack {
+                    Image(systemName: "checkmark.circle.fill")
+                        .foregroundColor(.green)
+                        .font(.caption)
+                    Text("上次查询: 未完成 \(cached.unfinishedCount) 个成就")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                }
+                .padding(.top, 8)
+            }
         }
         .padding()
         .background(Color(.systemBackground))
@@ -872,5 +898,613 @@ struct AchievementSuggestionCard: View {
             RoundedRectangle(cornerRadius: 12)
                 .stroke(achievement.priority.color.opacity(0.3), lineWidth: 1)
         )
+        .onTapGesture {
+            queryDungeonDetail()
+        }
+        .sheet(isPresented: $showingDungeonDetailQuery) {
+            if let result = queryResult {
+                DungeonDetailQueryResultView(
+                    queryResult: result,
+                    jx3boxAchievements: achievement.achievements
+                )
+            }
+        }
+    }
+    
+    private func getCachedQuery() -> DungeonAchievementQueryCache? {
+        return detailService.getCachedQuery(
+            server: character.server,
+            name: character.name,
+            dungeonName: achievement.dungeonName
+        )
+    }
+    
+    private func queryDungeonDetail() {
+        isQuerying = true
+        
+        Task {
+            do {
+                // 处理副本名称，如果包含特殊字符，只取后半部分
+                let processedDungeonName = self.processDungeonName(achievement.dungeonName)
+                let result = try await detailService.queryDungeonAchievements(
+                    server: character.server,
+                    role: character.name,
+                    dungeonName: processedDungeonName
+                )
+                
+                await MainActor.run {
+                    // 以JX3Box校验后的数据为准，只显示能匹配到的成就
+                    let mergedResult = self.mergeWithJX3BoxData(apiResult: result)
+                    self.queryResult = mergedResult
+                    
+                    // 标记所有匹配到的JX3Box成就为完成
+                    self.markAllMatchedAchievementsAsCompleted(mergedResult: mergedResult)
+                    
+                    self.isQuerying = false
+                    self.showingDungeonDetailQuery = true
+                }
+            } catch {
+                await MainActor.run {
+                    self.isQuerying = false
+                    print("查询副本详情失败: \(error.localizedDescription)")
+                    
+                    // 如果API查询失败，直接使用JX3Box校验后的数据
+                    if !achievement.achievements.isEmpty {
+                        self.createJX3BoxOnlyResult()
+                        self.showingDungeonDetailQuery = true
+                    }
+                }
+            }
+        }
+    }
+    
+    // 处理副本名称，提取实际用于查询的名称
+    private func processDungeonName(_ dungeonName: String) -> String {
+        // 处理包含特殊字符的副本名，例：尘归海·巨冥湾 -> 巨冥湾
+        let processedName: String
+        if let dotIndex = dungeonName.firstIndex(of: "·") {
+            processedName = String(dungeonName[dungeonName.index(after: dotIndex)...])
+        } else {
+            processedName = dungeonName
+        }
+        
+        print("🏰 副本名称处理: \(dungeonName) -> \(processedName)")
+        return processedName
+    }
+    
+    // 合并API结果和JX3Box数据 - 以JX3Box为主
+    private func mergeWithJX3BoxData(apiResult: DungeonAchievementQueryCache) -> DungeonAchievementQueryCache {
+        let jx3boxAchievements = achievement.achievements
+        
+        print("🔍 开始合并数据：")
+        print("  JX3Box成就数量: \(jx3boxAchievements.count)")
+        print("  API返回成就数量: \(apiResult.achievements.count)")
+        
+        // 打印前几个成就名称用于调试
+        print("  JX3Box成就前5个名称:")
+        for (index, achievement) in jx3boxAchievements.prefix(5).enumerated() {
+            print("    \(index + 1). \(achievement.name)")
+        }
+        
+        print("  API返回成就前5个名称:")
+        for (index, achievement) in apiResult.achievements.prefix(5).enumerated() {
+            print("    \(index + 1). \(achievement.name)")
+        }
+        
+        // 只保留能在JX3Box中匹配到的成就
+        let mergedAchievements = jx3boxAchievements.compactMap { jx3boxAchievement in
+            // 查找JX3API中同名成就 - 使用更智能的匹配逻辑
+            if let apiAchievement = findMatchingAchievement(jx3boxAchievement: jx3boxAchievement, apiAchievements: apiResult.achievements) {
+                print("    ✅ 成功匹配: JX3Box[\(jx3boxAchievement.name)] <-> API[\(apiAchievement.name)]")
+                
+                // 使用JX3API的真实完成状态，并同步更新JX3Box的状态
+                let apiIsCompleted = apiAchievement.isFinished
+                
+                // 根据API的真实状态更新JX3Box的标记
+                if apiIsCompleted {
+                    AchievementCompletionService.shared.markAchievementAsCompleted(jx3boxAchievement.id)
+                } else {
+                    AchievementCompletionService.shared.markAchievementAsIncomplete(jx3boxAchievement.id)
+                }
+                
+                return AchievementDetail(
+                    id: apiAchievement.id,
+                    icon: apiAchievement.icon,
+                    likes: apiAchievement.likes,
+                    name: apiAchievement.name,
+                    class: apiAchievement.class,
+                    subClass: apiAchievement.subClass,
+                    desc: apiAchievement.desc,
+                    detail: apiAchievement.detail,
+                    maps: apiAchievement.maps,
+                    isFinished: apiIsCompleted,
+                    isFav: apiAchievement.isFav,
+                    type: apiAchievement.type,
+                    currentValue: apiAchievement.currentValue,
+                    triggerValue: apiAchievement.triggerValue,
+                    subset: apiAchievement.subset,
+                    rewardItem: apiAchievement.rewardItem,
+                    rewardPoint: apiAchievement.rewardPoint,
+                    rewardPrefix: apiAchievement.rewardPrefix,
+                    rewardSuffix: apiAchievement.rewardSuffix
+                )
+            } else {
+                print("    ❌ 无法匹配: JX3Box[\(jx3boxAchievement.name)] 在API结果中未找到，使用JX3Box保存的状态")
+                // JX3Box有但API没有的成就，使用JX3Box保存的状态（不修改）
+                let isCompleted = AchievementCompletionService.shared.isAchievementCompleted(jx3boxAchievement.id)
+                return AchievementDetail(
+                    id: jx3boxAchievement.id,
+                    icon: "",
+                    likes: 0,
+                    name: jx3boxAchievement.name,
+                    class: "",
+                    subClass: "",
+                    desc: jx3boxAchievement.desc ?? "",
+                    detail: jx3boxAchievement.note ?? "",
+                    maps: [],
+                    isFinished: isCompleted,
+                    isFav: false,
+                    type: "simple",
+                    currentValue: isCompleted ? 1 : 0,
+                    triggerValue: 1,
+                    subset: [],
+                    rewardItem: nil,
+                    rewardPoint: jx3boxAchievement.point,
+                    rewardPrefix: "",
+                    rewardSuffix: ""
+                )
+            }
+        }
+        
+        
+        print("📊 合并结果: 成功匹配 \(mergedAchievements.count) 个成就")
+        
+        let unfinishedCount = mergedAchievements.filter { !$0.isFinished }.count
+        
+        return DungeonAchievementQueryCache(
+            serverName: apiResult.serverName,
+            roleName: apiResult.roleName,
+            dungeonName: apiResult.dungeonName,
+            achievements: mergedAchievements,
+            queryTime: apiResult.queryTime,
+            unfinishedCount: unfinishedCount,
+            totalCount: mergedAchievements.count
+        )
+    }
+    
+    // 智能匹配成就
+    private func findMatchingAchievement(jx3boxAchievement: ProcessedAchievement, apiAchievements: [AchievementDetail]) -> AchievementDetail? {
+        // 1. 精确匹配
+        if let exactMatch = apiAchievements.first(where: { $0.name == jx3boxAchievement.name }) {
+            return exactMatch
+        }
+        
+        // 2. 包含匹配（API包含JX3Box）
+        if let containsMatch = apiAchievements.first(where: { $0.name.contains(jx3boxAchievement.name) }) {
+            return containsMatch
+        }
+        
+        // 3. 反向包含匹配（JX3Box包含API）
+        if let reverseContainsMatch = apiAchievements.first(where: { jx3boxAchievement.name.contains($0.name) }) {
+            return reverseContainsMatch
+        }
+        
+        // 4. 特殊匹配规则：处理"挑战"类成就
+        if jx3boxAchievement.name.contains("挑战") {
+            // 移除"挑战"后的名称进行匹配
+            let baseJX3Name = jx3boxAchievement.name.replacingOccurrences(of: "！挑战", with: "")
+            if let challengeMatch = apiAchievements.first(where: { apiAch in
+                return apiAch.name.contains(baseJX3Name) || baseJX3Name.contains(apiAch.name.replacingOccurrences(of: "！挑战", with: "").replacingOccurrences(of: "巨冥湾", with: ""))
+            }) {
+                return challengeMatch
+            }
+        }
+        
+        return nil
+    }
+    
+    // 标记所有匹配到的JX3Box成就为完成（保持原有的JX3Box状态）
+    private func markAllMatchedAchievementsAsCompleted(mergedResult: DungeonAchievementQueryCache) {
+        // 不自动标记，保持JX3Box的原始状态
+        // 这个函数现在什么都不做，只是保持接口兼容性
+    }
+    
+    // 只使用JX3Box数据创建结果
+    private func createJX3BoxOnlyResult() {
+        let jx3boxAchievements = achievement.achievements
+        let unfinishedCount = jx3boxAchievements.filter { !AchievementCompletionService.shared.isAchievementCompleted($0.id) }.count
+        
+        // 将ProcessedAchievement转换为AchievementDetail
+        let achievementDetails = jx3boxAchievements.map { processedAchievement in
+            AchievementDetail(
+                id: processedAchievement.id,
+                icon: "",
+                likes: 0,
+                name: processedAchievement.name,
+                class: "",
+                subClass: "",
+                desc: processedAchievement.desc ?? "",
+                detail: processedAchievement.note ?? "",
+                maps: [],
+                isFinished: AchievementCompletionService.shared.isAchievementCompleted(processedAchievement.id),
+                isFav: false,
+                type: "simple",
+                currentValue: AchievementCompletionService.shared.isAchievementCompleted(processedAchievement.id) ? 1 : 0,
+                triggerValue: 1,
+                subset: [],
+                rewardItem: nil,
+                rewardPoint: processedAchievement.point,
+                rewardPrefix: "",
+                rewardSuffix: ""
+            )
+        }
+        
+        self.queryResult = DungeonAchievementQueryCache(
+            serverName: character.server,
+            roleName: character.name,
+            dungeonName: achievement.dungeonName,
+            achievements: achievementDetails,
+            queryTime: Date(),
+            unfinishedCount: unfinishedCount,
+            totalCount: achievementDetails.count
+        )
+    }
+}
+
+// MARK: - 副本详情查询结果视图
+struct DungeonDetailQueryResultView: View {
+    let queryResult: DungeonAchievementQueryCache
+    let jx3boxAchievements: [ProcessedAchievement] // JX3Box成就数据
+    @Environment(\.dismiss) private var dismiss
+    @State private var selectedFilter: AchievementFilter = .all
+    
+    enum AchievementFilter: String, CaseIterable {
+        case all = "全部"
+        case completed = "已完成"
+        case uncompleted = "未完成"
+    }
+    
+    private var filteredAchievements: [AchievementDetail] {
+        switch selectedFilter {
+        case .all:
+            return queryResult.achievements
+        case .completed:
+            return queryResult.achievements.filter { $0.isFinished }
+        case .uncompleted:
+            return queryResult.achievements.filter { !$0.isFinished }
+        }
+    }
+    
+    var body: some View {
+        NavigationView {
+            VStack(spacing: 0) {
+                // 分段选择器
+                Picker("过滤条件", selection: $selectedFilter) {
+                    ForEach(AchievementFilter.allCases, id: \.self) { filter in
+                        Text(filter.rawValue).tag(filter)
+                    }
+                }
+                .pickerStyle(SegmentedPickerStyle())
+                .padding()
+                
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        // 结果概览
+                        resultOverviewCard
+                        
+                        // 成就列表
+                        achievementsSection
+                    }
+                    .padding()
+                }
+            }
+            .navigationTitle(queryResult.dungeonName)
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("关闭") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    private var resultOverviewCard: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "doc.text.magnifyingglass")
+                    .font(.title2)
+                    .foregroundColor(.blue)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("查询结果")
+                        .font(.headline)
+                        .fontWeight(.bold)
+                    
+                    Text("查询时间: \(formatDate(queryResult.queryTime))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
+                Spacer()
+            }
+            
+            HStack(spacing: 16) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("成就总数")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\(queryResult.totalCount)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.blue)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("已完成")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\(queryResult.totalCount - queryResult.unfinishedCount)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.green)
+                }
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("未完成")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Text("\(queryResult.unfinishedCount)")
+                        .font(.title2)
+                        .fontWeight(.bold)
+                        .foregroundColor(.orange)
+                }
+                
+                Spacer()
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+    }
+    
+    private var achievementsSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Image(systemName: "list.bullet")
+                    .foregroundColor(selectedFilter == .completed ? .green : selectedFilter == .uncompleted ? .orange : .blue)
+                Text("\(selectedFilter.rawValue)成就")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                Spacer()
+                Text("\(filteredAchievements.count) 个")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            if filteredAchievements.isEmpty {
+                VStack(spacing: 16) {
+                    Image(systemName: selectedFilter == .completed ? "checkmark.circle.fill" : "magnifyingglass")
+                        .font(.system(size: 50))
+                        .foregroundColor(.gray)
+                    
+                    Text(selectedFilter == .completed ? "暂无已完成成就" : selectedFilter == .uncompleted ? "暂无未完成成就" : "暂无成就数据")
+                        .font(.headline)
+                        .foregroundColor(.secondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 40)
+            } else {
+                LazyVStack(spacing: 8) {
+                    ForEach(filteredAchievements, id: \.id) { achievement in
+                        DetailedAchievementCard(
+                            achievement: achievement,
+                            jx3boxAchievement: findJX3BoxAchievement(for: achievement)
+                        )
+                    }
+                }
+            }
+        }
+    }
+    
+    private func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        formatter.locale = Locale(identifier: "zh_CN")
+        return formatter.string(from: date)
+    }
+    
+    private func findJX3BoxAchievement(for achievement: AchievementDetail) -> ProcessedAchievement? {
+        return jx3boxAchievements.first { $0.name == achievement.name }
+    }
+}
+
+// MARK: - 详细成就卡片（支持展开攻略）
+struct DetailedAchievementCard: View {
+    let achievement: AchievementDetail
+    let jx3boxAchievement: ProcessedAchievement? // 对应的JX3Box成就数据
+    @State private var isExpanded = false
+    
+    init(achievement: AchievementDetail, jx3boxAchievement: ProcessedAchievement? = nil) {
+        self.achievement = achievement
+        self.jx3boxAchievement = jx3boxAchievement
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // 基础信息
+            HStack {
+                AsyncImage(url: URL(string: achievement.icon)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } placeholder: {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.gray.opacity(0.3))
+                        .overlay(
+                            Image(systemName: "star.fill")
+                                .foregroundColor(.gray)
+                        )
+                }
+                .frame(width: 40, height: 40)
+                
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(achievement.name)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                    
+                    Text(achievement.desc)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .lineLimit(isExpanded ? nil : 2)
+                }
+                
+                Spacer()
+                
+                VStack(alignment: .trailing, spacing: 4) {
+                    HStack {
+                        Image(systemName: achievement.isFinished ? "checkmark.circle.fill" : "clock")
+                            .foregroundColor(achievement.isFinished ? .green : .orange)
+                        
+                        Text(achievement.isFinished ? "已完成" : "未完成")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(achievement.isFinished ? .green : .orange)
+                    }
+                    
+                    if achievement.rewardPoint > 0 {
+                        Text("\(achievement.rewardPoint) 分")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                }
+            }
+            
+            // 进度条（如果有）
+            if achievement.type != "simple" && achievement.triggerValue > 0 {
+                HStack {
+                    Text("进度: \(achievement.currentValue)/\(achievement.triggerValue)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                    
+                    ProgressView(value: Double(achievement.currentValue) / Double(achievement.triggerValue))
+                        .frame(width: 100)
+                        .progressViewStyle(LinearProgressViewStyle(tint: achievement.isFinished ? .green : .blue))
+                }
+            }
+            
+            // 详细描述（如果有）
+            if isExpanded && !achievement.detail.isEmpty && achievement.detail != achievement.desc {
+                Text(achievement.detail)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.top, 4)
+            }
+            
+            // 子成就列表（如果有）
+            if isExpanded && !achievement.subset.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "list.bullet")
+                            .foregroundColor(.blue)
+                            .font(.caption)
+                        Text("子成就")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.blue)
+                    }
+                    
+                    ForEach(achievement.subset, id: \.id) { subAchievement in
+                        HStack {
+                            Image(systemName: subAchievement.isFinished ? "checkmark.circle.fill" : "circle")
+                                .foregroundColor(subAchievement.isFinished ? .green : .gray)
+                                .font(.caption2)
+                            
+                            Text(subAchievement.name)
+                                .font(.caption2)
+                                .foregroundColor(.secondary)
+                            
+                            Spacer()
+                        }
+                        .padding(.leading, 16)
+                    }
+                }
+            }
+            
+            // JX3Box攻略指南（如果有）
+            if isExpanded, let jx3boxAchievement = jx3boxAchievement, 
+               let postContent = jx3boxAchievement.postContent, !postContent.isEmpty {
+                VStack(alignment: .leading, spacing: 8) {
+                    HStack {
+                        Image(systemName: "lightbulb.fill")
+                            .foregroundColor(.yellow)
+                            .font(.caption)
+                        Text("攻略指南")
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.primary)
+                    }
+                    
+                    AchievementGuideView(htmlContent: postContent)
+                        .padding(.leading, 16)
+                }
+            }
+            
+            // 展开/收起按钮
+            HStack {
+                Spacer()
+                Button(action: {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        isExpanded.toggle()
+                    }
+                }) {
+                    HStack(spacing: 4) {
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        Text(isExpanded ? "收起" : "展开详情")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.blue.opacity(0.1))
+                    .cornerRadius(6)
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemBackground))
+        .cornerRadius(8)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(achievement.isFinished ? Color.green.opacity(0.3) : Color.orange.opacity(0.3), lineWidth: 1)
+        )
+    }
+}
+
+
+// MARK: - Safari视图包装
+struct SafariView: UIViewControllerRepresentable {
+    let url: URL
+    
+    func makeUIViewController(context: Context) -> SFSafariViewController {
+        return SFSafariViewController(url: url)
+    }
+    
+    func updateUIViewController(_ uiViewController: SFSafariViewController, context: Context) {}
+}
+
+// MARK: - 简化成就卡片（向后兼容）
+struct SimpleAchievementCard: View {
+    let achievement: AchievementDetail
+    
+    var body: some View {
+        DetailedAchievementCard(achievement: achievement)
     }
 }

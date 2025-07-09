@@ -33,16 +33,16 @@ struct ToolsView: View {
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
-                            
-                            Spacer()
-                            
-                            Text("\(dungeonManager.characters.count)")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 4)
-                                .background(Color.gray.opacity(0.2))
-                                .cornerRadius(8)
+//                            
+//                            Spacer()
+//                            
+//                            Text("\(dungeonManager.characters.count)")
+//                                .font(.caption)
+//                                .foregroundColor(.secondary)
+//                                .padding(.horizontal, 8)
+//                                .padding(.vertical, 4)
+//                                .background(Color.gray.opacity(0.2))
+//                                .cornerRadius(8)
                         }
                     }
                     
@@ -96,14 +96,13 @@ struct ToolsView: View {
                     
                     NavigationLink(destination: ArenaRecordView()) {
                         HStack {
-                            Image(systemName: "sword.circle.fill")
-                                .foregroundColor(.red)
-                                .frame(width: 24)
+                            Image(systemName: "figure.roll.runningpace")
+                                .foregroundColor(.blue)
                             
                             VStack(alignment: .leading, spacing: 4) {
-                                Text("名剑大会")
+                                Text("JJC战绩")
                                     .font(.headline)
-                                Text("查询竞技战绩和排名")
+                                Text("查询名剑大会战绩")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }

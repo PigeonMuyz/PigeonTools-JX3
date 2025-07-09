@@ -507,4 +507,97 @@ class JX3APIService {
         
         return arenaData
     }
+    
+    // MARK: - Character Card API
+    func fetchCharacterCard(server: String, name: String) async throws -> CharacterCardData {
+        guard !tokenV2.isEmpty else {
+            throw APIError.apiError("获取角色名片需要配置Token V2")
+        }
+        
+        let urlString = "https://www.jx3api.com/data/show/card"
+        guard var urlComponents = URLComponents(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        urlComponents.queryItems = [
+            URLQueryItem(name: "server", value: server),
+            URLQueryItem(name: "name", value: name),
+            URLQueryItem(name: "token", value: tokenV2)
+        ]
+        
+        guard let url = urlComponents.url else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.networkError
+        }
+        
+        let apiResponse = try JSONDecoder().decode(CharacterCardResponse.self, from: data)
+        
+        guard apiResponse.code == 200, let cardData = apiResponse.data else {
+            throw APIError.apiError(apiResponse.msg)
+        }
+        
+        return cardData
+    }
+    
+    // MARK: - Character Achievement Detail API
+    func fetchCharacterAchievementDetail(server: String, role: String, name: String) async throws -> CharacterAchievementDetailData {
+        guard !ticket.isEmpty || !token.isEmpty else {
+            throw APIError.apiError("获取角色成就详情需要配置Ticket和Token V1")
+        }
+        
+        let urlString = "https://www.jx3api.com/data/role/achievement"
+        guard var urlComponents = URLComponents(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        var queryItems = [
+            URLQueryItem(name: "server", value: server),
+            URLQueryItem(name: "role", value: role),
+            URLQueryItem(name: "name", value: name)
+        ]
+        
+        if !ticket.isEmpty {
+            queryItems.append(URLQueryItem(name: "ticket", value: ticket))
+        }
+        
+        if !token.isEmpty {
+            queryItems.append(URLQueryItem(name: "token", value: token))
+        }
+        
+        urlComponents.queryItems = queryItems
+        
+        guard let url = urlComponents.url else {
+            throw APIError.invalidURL
+        }
+        
+        print("请求角色成就详情URL: \(url.absoluteString)")
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.networkError
+        }
+        
+        let apiResponse = try JSONDecoder().decode(CharacterAchievementDetailResponse.self, from: data)
+        
+        guard apiResponse.code == 200, let detailData = apiResponse.data else {
+            throw APIError.apiError(apiResponse.msg)
+        }
+        
+        return detailData
+    }
 }

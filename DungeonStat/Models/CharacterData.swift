@@ -89,3 +89,175 @@ struct PanelAttribute: Codable, Identifiable {
         case name, percent, value
     }
 }
+
+// MARK: - Character Card Models
+struct CharacterCardResponse: Codable {
+    let code: Int
+    let msg: String
+    let data: CharacterCardData?
+    let time: Int
+}
+
+struct CharacterCardData: Codable, Identifiable {
+    let id = UUID()
+    let zoneName: String
+    let serverName: String
+    let roleName: String
+    let showHash: String
+    let showAvatar: String
+    let cacheTime: Int
+    
+    private enum CodingKeys: String, CodingKey {
+        case zoneName, serverName, roleName, showHash, showAvatar, cacheTime
+    }
+}
+
+struct CharacterCardCache: Codable, Identifiable {
+    let id = UUID()
+    let zoneName: String
+    let serverName: String
+    let roleName: String
+    let showHash: String
+    let localImagePath: String
+    let cacheTime: Int
+    let lastUpdated: Date
+    
+    private enum CodingKeys: String, CodingKey {
+        case zoneName, serverName, roleName, showHash, localImagePath, cacheTime, lastUpdated
+    }
+}
+
+// MARK: - Character Achievement Detail Models
+struct CharacterAchievementDetailResponse: Codable {
+    let code: Int
+    let msg: String
+    let data: CharacterAchievementDetailData?
+    let time: Int
+}
+
+struct CharacterAchievementDetailData: Codable {
+    let zoneName: String
+    let serverName: String
+    let roleName: String
+    let roleId: String
+    let globalRoleId: String
+    let forceName: String
+    let forceId: String
+    let bodyName: String
+    let bodyId: String
+    let tongName: String?
+    let tongId: String?
+    let campName: String
+    let campId: String
+    let personName: String?
+    let personId: String
+    let personAvatar: String?
+    let data: [AchievementDetail]
+}
+
+struct AchievementDetail: Codable, Identifiable {
+    let id: Int
+    let icon: String
+    let likes: Int
+    let name: String
+    let `class`: String
+    let subClass: String
+    let desc: String
+    let detail: String
+    let maps: [String]
+    let isFinished: Bool
+    let isFav: Bool
+    let type: String
+    let currentValue: Int
+    let triggerValue: Int
+    let subset: [AchievementSubset]
+    let rewardItem: String?
+    let rewardPoint: Int
+    let rewardPrefix: String
+    let rewardSuffix: String
+    
+    private enum CodingKeys: String, CodingKey {
+        case id, icon, likes, name, `class`, subClass, desc, detail, maps, isFinished, isFav, type, currentValue, triggerValue, subset, rewardItem, rewardPoint, rewardPrefix, rewardSuffix
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        id = try container.decode(Int.self, forKey: .id)
+        icon = try container.decode(String.self, forKey: .icon)
+        likes = try container.decode(Int.self, forKey: .likes)
+        name = try container.decode(String.self, forKey: .name)
+        `class` = try container.decode(String.self, forKey: .class)
+        subClass = try container.decode(String.self, forKey: .subClass)
+        desc = try container.decode(String.self, forKey: .desc)
+        detail = try container.decode(String.self, forKey: .detail)
+        maps = try container.decode([String].self, forKey: .maps)
+        isFinished = try container.decode(Bool.self, forKey: .isFinished)
+        isFav = try container.decode(Bool.self, forKey: .isFav)
+        type = try container.decode(String.self, forKey: .type)
+        currentValue = try container.decode(Int.self, forKey: .currentValue)
+        triggerValue = try container.decode(Int.self, forKey: .triggerValue)
+        subset = try container.decode([AchievementSubset].self, forKey: .subset)
+        rewardPoint = try container.decode(Int.self, forKey: .rewardPoint)
+        rewardPrefix = try container.decode(String.self, forKey: .rewardPrefix)
+        rewardSuffix = try container.decode(String.self, forKey: .rewardSuffix)
+        
+        // 处理 rewardItem 字段，可能是字符串或字典
+        if let rewardItemString = try? container.decode(String.self, forKey: .rewardItem) {
+            rewardItem = rewardItemString
+        } else {
+            // 如果不是字符串，设为 nil
+            rewardItem = nil
+        }
+    }
+    
+    // 便利构造函数，用于手动创建 AchievementDetail
+    init(id: Int, icon: String, likes: Int, name: String, class: String, subClass: String, desc: String, detail: String, maps: [String], isFinished: Bool, isFav: Bool, type: String, currentValue: Int, triggerValue: Int, subset: [AchievementSubset], rewardItem: String?, rewardPoint: Int, rewardPrefix: String, rewardSuffix: String) {
+        self.id = id
+        self.icon = icon
+        self.likes = likes
+        self.name = name
+        self.`class` = `class`
+        self.subClass = subClass
+        self.desc = desc
+        self.detail = detail
+        self.maps = maps
+        self.isFinished = isFinished
+        self.isFav = isFav
+        self.type = type
+        self.currentValue = currentValue
+        self.triggerValue = triggerValue
+        self.subset = subset
+        self.rewardItem = rewardItem
+        self.rewardPoint = rewardPoint
+        self.rewardPrefix = rewardPrefix
+        self.rewardSuffix = rewardSuffix
+    }
+}
+
+struct AchievementSubset: Codable, Identifiable {
+    let id: Int
+    let icon: String
+    let isFinished: Bool
+    let name: String
+    
+    private enum CodingKeys: String, CodingKey {
+        case id, icon, isFinished, name
+    }
+}
+
+// MARK: - Dungeon Achievement Query Cache
+struct DungeonAchievementQueryCache: Codable, Identifiable {
+    let id = UUID()
+    let serverName: String
+    let roleName: String
+    let dungeonName: String
+    let achievements: [AchievementDetail]
+    let queryTime: Date
+    let unfinishedCount: Int
+    let totalCount: Int
+    
+    private enum CodingKeys: String, CodingKey {
+        case serverName, roleName, dungeonName, achievements, queryTime, unfinishedCount, totalCount
+    }
+}
