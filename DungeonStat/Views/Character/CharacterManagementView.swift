@@ -448,7 +448,7 @@ struct CharacterManagementView: View {
                             // 副本资历统计按钮
                             Button {
                                 selectedCharacterForAchievement = gameCharacter
-                                showingAchievementAnalyzer = true
+//                                showingAchievementAnalyzer = true
                             } label: {
                                 Image(systemName: "star.circle")
                             }
@@ -469,11 +469,21 @@ struct CharacterManagementView: View {
                             // 角色名片按钮
                             Button {
                                 selectedCharacterForCard = gameCharacter
-                                showingCharacterCard = true
+//                                showingCharacterCard = true
                             } label: {
                                 Image(systemName: "person.crop.rectangle")
                             }
                             .tint(.green)
+                        }
+                    }
+                    .onChange(of: selectedCharacterForAchievement) {
+                        if selectedCharacterForAchievement != nil {
+                            showingAchievementAnalyzer = true
+                        }
+                    }
+                    .onChange(of: selectedCharacterForCard) {
+                        if selectedCharacterForCard != nil {
+                            showingCharacterCard = true
                         }
                     }
                 }
@@ -621,12 +631,16 @@ struct CharacterManagementView: View {
         .sheet(isPresented: $showingAchievementComparison) {
             AchievementComparisonSheet(characters: Array(selectedCharactersForComparison))
         }
-        .sheet(isPresented: $showingAchievementAnalyzer) {
+        .sheet(isPresented: $showingAchievementAnalyzer, onDismiss: {
+            selectedCharacterForAchievement = nil
+        }) {
             if let character = selectedCharacterForAchievement {
                 AchievementAnalyzerView(character: character)
             }
         }
-        .sheet(isPresented: $showingCharacterCard) {
+        .sheet(isPresented: $showingCharacterCard, onDismiss: {
+            selectedCharacterForCard = nil
+        }) {
             if let character = selectedCharacterForCard {
                 CharacterCardView(server: character.server, name: character.name)
             }
@@ -635,7 +649,6 @@ struct CharacterManagementView: View {
     
     func loadCharacterDetail(for character: GameCharacter) {
         isLoadingDetail = true
-        showingCharacterDetail = true
         
         Task {
             do {
@@ -652,11 +665,13 @@ struct CharacterManagementView: View {
                         data: data,
                         time: nil
                     )
+                    showingCharacterDetail = true
                 }
             } catch {
                 await MainActor.run {
                     isLoadingDetail = false
                     characterDetailData = nil
+                    showingCharacterDetail = true
                     print("角色数据加载失败: \(error)")
                 }
             }

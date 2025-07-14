@@ -270,7 +270,7 @@ class JX3APIService {
         guard let url = urlComponents.url else {
             throw APIError.invalidURL
         }
-        
+        print(url);
         
         let (data, response) = try await URLSession.shared.data(from: url)
         

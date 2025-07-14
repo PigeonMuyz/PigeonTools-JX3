@@ -76,7 +76,7 @@ extension DungeonManager {
         
         // 如果有自定义分类名称，返回一个临时分类对象
         if let customName = dungeon.customCategory, !customName.isEmpty {
-            return DungeonCategory(name: customName, order: 999, isDefault: false)
+            return DungeonCategory(name: customName, order: 999, isDefault: false, color: "gray", icon: "folder.fill")
         }
         
         // 使用自动分类
@@ -156,7 +156,7 @@ extension DungeonManager {
         
         // 添加自定义分类
         for (categoryName, dungeons) in customCategoryDungeons.sorted(by: { $0.key < $1.key }) {
-            let customCategory = DungeonCategory(name: categoryName, order: 998, isDefault: false)
+            let customCategory = DungeonCategory(name: categoryName, order: 998, isDefault: false, color: "gray", icon: "folder.fill")
             result.append((category: customCategory, dungeons: dungeons))
         }
         

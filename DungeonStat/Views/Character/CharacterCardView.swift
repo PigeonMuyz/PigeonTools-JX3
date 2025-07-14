@@ -6,6 +6,7 @@
 //
 
 import SwiftUI
+import UIKit
 
 struct CharacterCardView: View {
     let server: String
@@ -17,6 +18,9 @@ struct CharacterCardView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var showingHistoricalCards = false
+    @State private var showingShareSheet = false
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
     
     var body: some View {
         NavigationView {
@@ -32,6 +36,25 @@ struct CharacterCardView: View {
                                 .aspectRatio(contentMode: .fit)
                                 .cornerRadius(12)
                                 .shadow(radius: 8)
+                                .contextMenu {
+                                    Button(action: {
+                                        shareImage()
+                                    }) {
+                                        Label("分享", systemImage: "square.and.arrow.up")
+                                    }
+                                    
+                                    Button(action: {
+                                        saveImageToPhotos()
+                                    }) {
+                                        Label("保存到相册", systemImage: "square.and.arrow.down")
+                                    }
+                                    
+                                    Button(action: {
+                                        copyImage()
+                                    }) {
+                                        Label("复制", systemImage: "doc.on.doc")
+                                    }
+                                }
                             
                             if let cache = cardCache {
                                 VStack(alignment: .leading, spacing: 4) {
@@ -101,6 +124,16 @@ struct CharacterCardView: View {
             .sheet(isPresented: $showingHistoricalCards) {
                 HistoricalCardsView(server: server, name: name)
             }
+            .sheet(isPresented: $showingShareSheet) {
+                if let cardImage = cardImage {
+                    ShareSheet(items: [cardImage])
+                }
+            }
+            .alert("提示", isPresented: $showingAlert) {
+                Button("确定") { }
+            } message: {
+                Text(alertMessage)
+            }
         }
         .task {
             await loadCard()
@@ -160,6 +193,34 @@ struct CharacterCardView: View {
         formatter.locale = Locale(identifier: "zh_CN")
         return formatter.string(from: date)
     }
+    
+    private func shareImage() {
+        guard let cardImage = cardImage else { return }
+        showingShareSheet = true
+    }
+    
+    private func saveImageToPhotos() {
+        guard let cardImage = cardImage else { return }
+        
+        ImageCacheService.shared.saveImageToPhotos(cardImage) { success, error in
+            DispatchQueue.main.async {
+                if success {
+                    alertMessage = "图片已保存到相册"
+                } else {
+                    alertMessage = "保存失败: \(error?.localizedDescription ?? "未知错误")"
+                }
+                showingAlert = true
+            }
+        }
+    }
+    
+    private func copyImage() {
+        guard let cardImage = cardImage else { return }
+        
+        UIPasteboard.general.image = cardImage
+        alertMessage = "图片已复制到剪贴板"
+        showingAlert = true
+    }
 }
 
 struct HistoricalCardsView: View {
@@ -207,6 +268,9 @@ struct HistoricalCardsView: View {
 struct HistoricalCardRow: View {
     let card: CharacterCardCache
     @StateObject private var cacheService = CharacterCardCacheService.shared
+    @State private var showingShareSheet = false
+    @State private var showingAlert = false
+    @State private var alertMessage = ""
     
     var body: some View {
         HStack {
@@ -216,6 +280,25 @@ struct HistoricalCardRow: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(width: 60, height: 60)
                     .cornerRadius(8)
+                    .contextMenu {
+                        Button(action: {
+                            shareImage(image)
+                        }) {
+                            Label("分享", systemImage: "square.and.arrow.up")
+                        }
+                        
+                        Button(action: {
+                            saveImageToPhotos(image)
+                        }) {
+                            Label("保存到相册", systemImage: "square.and.arrow.down")
+                        }
+                        
+                        Button(action: {
+                            copyImage(image)
+                        }) {
+                            Label("复制", systemImage: "doc.on.doc")
+                        }
+                    }
             } else {
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.gray.opacity(0.3))
@@ -240,6 +323,16 @@ struct HistoricalCardRow: View {
             Spacer()
         }
         .padding(.vertical, 4)
+        .sheet(isPresented: $showingShareSheet) {
+            if let image = cacheService.getCachedImage(for: card) {
+                ShareSheet(items: [image])
+            }
+        }
+        .alert("提示", isPresented: $showingAlert) {
+            Button("确定") { }
+        } message: {
+            Text(alertMessage)
+        }
     }
     
     private func formatDate(_ date: Date) -> String {
@@ -249,4 +342,38 @@ struct HistoricalCardRow: View {
         formatter.locale = Locale(identifier: "zh_CN")
         return formatter.string(from: date)
     }
+    
+    private func shareImage(_ image: UIImage) {
+        showingShareSheet = true
+    }
+    
+    private func saveImageToPhotos(_ image: UIImage) {
+        ImageCacheService.shared.saveImageToPhotos(image) { success, error in
+            DispatchQueue.main.async {
+                if success {
+                    alertMessage = "图片已保存到相册"
+                } else {
+                    alertMessage = "保存失败: \(error?.localizedDescription ?? "未知错误")"
+                }
+                showingAlert = true
+            }
+        }
+    }
+    
+    private func copyImage(_ image: UIImage) {
+        UIPasteboard.general.image = image
+        alertMessage = "图片已复制到剪贴板"
+        showingAlert = true
+    }
+}
+
+struct ShareSheet: UIViewControllerRepresentable {
+    let items: [Any]
+    
+    func makeUIViewController(context: Context) -> UIActivityViewController {
+        let controller = UIActivityViewController(activityItems: items, applicationActivities: nil)
+        return controller
+    }
+    
+    func updateUIViewController(_ uiViewController: UIActivityViewController, context: Context) {}
 }

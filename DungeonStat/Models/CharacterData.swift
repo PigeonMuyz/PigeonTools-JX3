@@ -113,17 +113,30 @@ struct CharacterCardData: Codable, Identifiable {
 }
 
 struct CharacterCardCache: Codable, Identifiable {
-    let id = UUID()
+    let id: UUID
     let zoneName: String
     let serverName: String
     let roleName: String
     let showHash: String
-    let localImagePath: String
+    let localImagePath: String? // 保留以兼容旧数据
+    let imageBase64: String? // 新增Base64图片数据
     let cacheTime: Int
     let lastUpdated: Date
     
+    init(id: UUID = UUID(), zoneName: String, serverName: String, roleName: String, showHash: String, localImagePath: String? = nil, imageBase64: String? = nil, cacheTime: Int, lastUpdated: Date) {
+        self.id = id
+        self.zoneName = zoneName
+        self.serverName = serverName
+        self.roleName = roleName
+        self.showHash = showHash
+        self.localImagePath = localImagePath
+        self.imageBase64 = imageBase64
+        self.cacheTime = cacheTime
+        self.lastUpdated = lastUpdated
+    }
+    
     private enum CodingKeys: String, CodingKey {
-        case zoneName, serverName, roleName, showHash, localImagePath, cacheTime, lastUpdated
+        case id, zoneName, serverName, roleName, showHash, localImagePath, imageBase64, cacheTime, lastUpdated
     }
 }
 

@@ -13,7 +13,8 @@ struct DungeonCategory: Identifiable, Codable, Hashable {
     var name: String
     var order: Int // 排序顺序
     var isDefault: Bool = false // 是否为预设分类
-    var color: String? // 分类颜色（可选）
+    var color: String // 分类颜色
+    var icon: String // 分类图标
     
     // MARK: - Hashable & Equatable
     func hash(into hasher: inout Hasher) {
@@ -28,11 +29,11 @@ struct DungeonCategory: Identifiable, Codable, Hashable {
 // MARK: - 预设分类定义
 extension DungeonCategory {
     static let defaultCategories: [DungeonCategory] = [
-        DungeonCategory(name: "丝路风雨", order: 1, isDefault: true, color: "red"),
-        DungeonCategory(name: "横刀断浪", order: 2, isDefault: true, color: "red"),
-        DungeonCategory(name: "奉天证道", order: 3, isDefault: true, color: "red"),
-        DungeonCategory(name: "世外蓬莱", order: 4, isDefault: true, color: "red"),
-        DungeonCategory(name: "其他", order: 999, isDefault: true, color: "gray")
+        DungeonCategory(name: "丝路风雨", order: 1, isDefault: true, color: "red", icon: "mountain.2.fill"),
+        DungeonCategory(name: "横刀断浪", order: 2, isDefault: true, color: "blue", icon: "sword.slash"),
+        DungeonCategory(name: "奉天证道", order: 3, isDefault: true, color: "green", icon: "crown.fill"),
+        DungeonCategory(name: "世外蓬莱", order: 4, isDefault: true, color: "purple", icon: "cloud.fill"),
+        DungeonCategory(name: "其他", order: 999, isDefault: true, color: "gray", icon: "folder.fill")
     ]
 }
 

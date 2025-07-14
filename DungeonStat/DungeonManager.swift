@@ -59,6 +59,22 @@ class DungeonManager: ObservableObject {
         persistenceManager.saveCompletionRecords(completionRecords)
     }
     
+    // MARK: - 重新加载所有数据（用于备份恢复后）
+    func reloadAllData() {
+        print("=== 开始重新加载所有数据 ===")
+        
+        // 重新加载分类数据
+        loadCategories()
+        
+        // 重新加载核心数据
+        loadData()
+        
+        // 重新加载日常任务管理器的数据
+        dailyTaskManager = DailyTaskManager()
+        
+        print("=== 所有数据重新加载完成 ===")
+    }
+    
     // MARK: - 数据同步
     func syncStatisticsFromRecords() {
         statisticsManager.syncStatisticsFromRecords(
