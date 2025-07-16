@@ -64,6 +64,12 @@ struct AppBackupData: Codable {
             let weekNumber: Int
             let year: Int
             let duration: TimeInterval
+            let drops: [DropItemBackup]?  // 可选字段，向后兼容
+        }
+        
+        struct DropItemBackup: Codable {
+            let id: UUID
+            let name: String
         }
         
         struct DungeonCategoryBackup: Codable {

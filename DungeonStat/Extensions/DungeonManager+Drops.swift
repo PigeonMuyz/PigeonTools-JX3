@@ -15,7 +15,7 @@ extension DungeonManager {
         guard !dropNames.isEmpty else { return }
         
         if let index = completionRecords.firstIndex(where: { $0.id == record.id }) {
-            var currentRecord = completionRecords[index]
+            let currentRecord = completionRecords[index]
             var newDrops = currentRecord.drops
             
             // 批量创建 DropItem 并添加

@@ -99,7 +99,7 @@ struct CategorySelectorView: View {
                     }) {
                         HStack {
                             Circle()
-                                .fill(Color(category.color ?? "gray"))
+                                .fill(Color(category.color))
                                 .frame(width: 20, height: 20)
                             Text(category.name)
                                 .foregroundColor(.primary)

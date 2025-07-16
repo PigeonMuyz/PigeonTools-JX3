@@ -153,7 +153,13 @@ class EnhancedBackupService: ObservableObject {
                 completedDate: record.completedDate,
                 weekNumber: record.weekNumber,
                 year: record.year,
-                duration: record.duration
+                duration: record.duration,
+                drops: record.drops.map { drop in
+                    AppBackupData.CoreDataBackup.DropItemBackup(
+                        id: drop.id,
+                        name: drop.name
+                    )
+                }
             )
         }
         
@@ -329,7 +335,11 @@ class EnhancedBackupService: ObservableObject {
             
             // 3. 恢复完成记录
             let restoredRecords = coreData.completionRecords.map { backupRecord in
-                CompletionRecord(
+                let drops = backupRecord.drops?.map { dropBackup in
+                    DropItem(id: dropBackup.id, name: dropBackup.name)
+                } ?? []  // 如果没有drops字段则为空数组
+                
+                return CompletionRecord(
                     dungeonName: backupRecord.dungeonName,
                     character: GameCharacter(
                         server: backupRecord.character.server,
@@ -340,7 +350,8 @@ class EnhancedBackupService: ObservableObject {
                     completedDate: backupRecord.completedDate,
                     weekNumber: backupRecord.weekNumber,
                     year: backupRecord.year,
-                    duration: backupRecord.duration
+                    duration: backupRecord.duration,
+                    drops: drops
                 )
             }
             persistence.saveCompletionRecords(restoredRecords)

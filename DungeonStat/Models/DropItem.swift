@@ -9,8 +9,18 @@ import SwiftUI
 
 // MARK: - 掉落物品数据模型
 struct DropItem: Identifiable, Codable, Hashable {
-    let id = UUID()
+    let id: UUID
     let name: String
+    
+    init(name: String) {
+        self.id = UUID()
+        self.name = name
+    }
+    
+    init(id: UUID, name: String) {
+        self.id = id
+        self.name = name
+    }
     
     // 根据名称判断颜色（支持深色模式）
     var color: Color {

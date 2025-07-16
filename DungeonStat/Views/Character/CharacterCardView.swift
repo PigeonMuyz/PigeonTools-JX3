@@ -21,6 +21,7 @@ struct CharacterCardView: View {
     @State private var showingShareSheet = false
     @State private var showingAlert = false
     @State private var alertMessage = ""
+    @State private var showingImageProcessing = false
     
     var body: some View {
         NavigationView {
@@ -37,6 +38,14 @@ struct CharacterCardView: View {
                                 .cornerRadius(12)
                                 .shadow(radius: 8)
                                 .contextMenu {
+                                    Button(action: {
+                                        showingImageProcessing = true
+                                    }) {
+                                        Label("图片后处理", systemImage: "wand.and.rays")
+                                    }
+                                    
+                                    Divider()
+                                    
                                     Button(action: {
                                         shareImage()
                                     }) {
@@ -127,6 +136,13 @@ struct CharacterCardView: View {
             .sheet(isPresented: $showingShareSheet) {
                 if let cardImage = cardImage {
                     ShareSheet(items: [cardImage])
+                }
+            }
+            .sheet(isPresented: $showingImageProcessing) {
+                if let cardImage = cardImage {
+                    ImageProcessingView(originalImage: cardImage) {
+                        showingImageProcessing = false
+                    }
                 }
             }
             .alert("提示", isPresented: $showingAlert) {
