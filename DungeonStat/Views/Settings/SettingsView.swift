@@ -147,99 +147,156 @@ struct APISettingsView: View {
     @State private var showingTokenHelp = false
     @State private var tokenUsageData: [String: TokenUsageData] = [:]
     @State private var isLoadingUsage = false
+    @State private var editingTokenType: EditingTokenType?
+    
+    enum EditingTokenType {
+        case tokenV1, tokenV2, ticket
+    }
     
     var body: some View {
         List {
-            Section(header: HStack {
-                Text("JX3API令牌配置")
-                Spacer()
-                Button("帮助") {
-                    showingTokenHelp = true
-                }
-                .font(.caption)
-                .foregroundColor(.blue)
-            }) {
-                // Token V1
-                TokenListItem(
-                    tokenName: "Token V1",
-                    tokenValue: jx3ApiToken,
-                    tokenDescription: "用于基础API调用",
-                    tokenType: .v1,
-                    usageData: tokenUsageData[jx3ApiToken],
-                    isLoadingUsage: isLoadingUsage,
-                    onTokenChange: { newValue in
-                        jx3ApiToken = newValue
-                    },
-                    onRefreshUsage: {
-                        if !jx3ApiToken.isEmpty {
-                            Task {
-                                await fetchTokenUsage(token: jx3ApiToken)
-                            }
-                        }
-                    }
-                )
-                
-                // Token V2
-                TokenListItem(
-                    tokenName: "Token V2",
-                    tokenValue: jx3ApiTokenV2,
-                    tokenDescription: "用于高级API调用",
-                    tokenType: .v2,
-                    usageData: tokenUsageData[jx3ApiTokenV2],
-                    isLoadingUsage: isLoadingUsage,
-                    onTokenChange: { newValue in
-                        jx3ApiTokenV2 = newValue
-                    },
-                    onRefreshUsage: {
-                        if !jx3ApiTokenV2.isEmpty {
-                            Task {
-                                await fetchTokenUsage(token: jx3ApiTokenV2)
-                            }
-                        }
-                    }
-                )
-                
-                // Ticket
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Text("Ticket")
+            // 配置状态概览
+            Section(header: Text("配置状态")) {
+                HStack {
+                    Image(systemName: hasAPITokens ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                        .foregroundColor(hasAPITokens ? .green : .orange)
+                        .font(.title2)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(hasAPITokens ? "API已配置" : "请配置API令牌")
                             .font(.headline)
-                        Spacer()
-                        Image(systemName: jx3ApiTicket.isEmpty ? "xmark.circle" : "checkmark.circle")
-                            .foregroundColor(jx3ApiTicket.isEmpty ? .red : .green)
+                            .foregroundColor(hasAPITokens ? .green : .orange)
+                        
+                        Text("当前已配置：\(configuredTokensCount)个令牌")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
                     
-                    TextField("请输入Ticket", text: $jx3ApiTicket)
-                        .textFieldStyle(RoundedBorderTextFieldStyle())
-                        .autocapitalization(.none)
-                        .disableAutocorrection(true)
+                    Spacer()
                     
-                    Text("用于角色详细信息查询")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Button("帮助") {
+                        showingTokenHelp = true
+                    }
+                    .font(.caption)
+                    .foregroundColor(.blue)
                 }
-                .padding(.vertical, 4)
+                .padding(.vertical, 8)
             }
             
-            Section(header: Text("操作")) {
-                Button("刷新所有Token用量") {
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .light)
-                    impactFeedback.impactOccurred()
-                    
-                    Task {
-                        await refreshAllTokenUsage()
+            // Token V1 配置
+            Section(header: Text("Token V1 - 基础API")) {
+                SimpleTokenRow(
+                    title: "Token V1",
+                    description: "用于基础API调用，如团队招募、装备属性等",
+                    value: $jx3ApiToken,  // 直接绑定@AppStorage
+                    isEditing: editingTokenType == .tokenV1,
+                    usageData: tokenUsageData[jx3ApiToken],
+                    isLoadingUsage: isLoadingUsage,
+                    onEdit: {
+                        editingTokenType = .tokenV1
+                    },
+                    onSave: {
+                        // 值已经通过绑定自动保存
+                        if !jx3ApiToken.isEmpty {
+                            Task { await fetchTokenUsage(token: jx3ApiToken) }
+                        }
+                        stopEditing()
+                    },
+                    onCancel: { stopEditing() },
+                    onRefresh: {
+                        if !jx3ApiToken.isEmpty {
+                            Task { await fetchTokenUsage(token: jx3ApiToken) }
+                        }
                     }
-                }
-                .disabled(jx3ApiToken.isEmpty && jx3ApiTokenV2.isEmpty)
-                
-                Button("清除所有配置") {
-                    let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
-                    impactFeedback.impactOccurred()
+                )
+                .id("tokenV1-\(jx3ApiToken)")
+            }
+            
+            // Token V2 配置
+            Section(header: Text("Token V2 - 高级API")) {
+                SimpleTokenRow(
+                    title: "Token V2",
+                    description: "用于高级API调用，如百战、资历统计等",
+                    value: $jx3ApiTokenV2,  // 直接绑定@AppStorage
+                    isEditing: editingTokenType == .tokenV2,
+                    usageData: tokenUsageData[jx3ApiTokenV2],
+                    isLoadingUsage: isLoadingUsage,
+                    onEdit: {
+                        editingTokenType = .tokenV2
+                    },
+                    onSave: {
+                        // 值已经通过绑定自动保存
+                        if !jx3ApiTokenV2.isEmpty {
+                            Task { await fetchTokenUsage(token: jx3ApiTokenV2) }
+                        }
+                        stopEditing()
+                    },
+                    onCancel: { stopEditing() },
+                    onRefresh: {
+                        if !jx3ApiTokenV2.isEmpty {
+                            Task { await fetchTokenUsage(token: jx3ApiTokenV2) }
+                        }
+                    }
+                )
+                .id("tokenV2-\(jx3ApiTokenV2)")
+            }
+            
+            // Ticket 配置
+            Section(header: Text("Ticket - 角色信息")) {
+                SimpleTokenRow(
+                    title: "Ticket",
+                    description: "用于角色详细信息查询，格式：ticket:timestamp:platform::hash",
+                    value: $jx3ApiTicket,  // 直接绑定@AppStorage
+                    isEditing: editingTokenType == .ticket,
+                    usageData: nil,
+                    isLoadingUsage: false,
+                    onEdit: {
+                        editingTokenType = .ticket
+                    },
+                    onSave: {
+                        // 值已经通过绑定自动保存
+                        stopEditing()
+                    },
+                    onCancel: { stopEditing() },
+                    onRefresh: nil
+                )
+                .id("ticket-\(jx3ApiTicket)")
+            }
+            
+            // 操作按钮
+            Section(header: Text("操作")) {
+                HStack {
+                    Image(systemName: "arrow.clockwise.circle")
+                        .foregroundColor(.blue)
                     
-                    jx3ApiToken = ""
-                    jx3ApiTokenV2 = ""
-                    jx3ApiTicket = ""
-                    tokenUsageData.removeAll()
+                    Button("刷新所有Token用量") {
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .light)
+                        impactFeedback.impactOccurred()
+                        
+                        Task {
+                            await refreshAllTokenUsage()
+                        }
+                    }
+                    .disabled(jx3ApiToken.isEmpty && jx3ApiTokenV2.isEmpty)
+                    
+                    Spacer()
+                }
+                
+                HStack {
+                    Image(systemName: "trash.circle")
+                        .foregroundColor(.red)
+                    
+                    Button("清除所有配置") {
+                        let impactFeedback = UIImpactFeedbackGenerator(style: .medium)
+                        impactFeedback.impactOccurred()
+                        
+                        jx3ApiToken = ""
+                        jx3ApiTokenV2 = ""
+                        jx3ApiTicket = ""
+                        tokenUsageData.removeAll()
+                    }
+                    
+                    Spacer()
                 }
                 .foregroundColor(.red)
             }
@@ -252,6 +309,22 @@ struct APISettingsView: View {
         .task {
             await refreshAllTokenUsage()
         }
+    }
+    
+    private var hasAPITokens: Bool {
+        !jx3ApiToken.isEmpty || !jx3ApiTokenV2.isEmpty || !jx3ApiTicket.isEmpty
+    }
+    
+    private var configuredTokensCount: Int {
+        var count = 0
+        if !jx3ApiToken.isEmpty { count += 1 }
+        if !jx3ApiTokenV2.isEmpty { count += 1 }
+        if !jx3ApiTicket.isEmpty { count += 1 }
+        return count
+    }
+    
+    private func stopEditing() {
+        editingTokenType = nil
     }
     
     private func fetchTokenUsage(token: String) async {
@@ -293,225 +366,153 @@ enum TokenType {
     case v2
 }
 
-// MARK: - Token列表项视图
-struct TokenListItem: View {
-    let tokenName: String
-    let tokenValue: String
-    let tokenDescription: String
-    let tokenType: TokenType
+// MARK: - 简化的Token行视图
+struct SimpleTokenRow: View {
+    let title: String
+    let description: String
+    @Binding var value: String  // 直接绑定到@AppStorage
+    let isEditing: Bool
     let usageData: TokenUsageData?
     let isLoadingUsage: Bool
-    let onTokenChange: (String) -> Void
-    let onRefreshUsage: () -> Void
+    let onEdit: () -> Void
+    let onSave: () -> Void
+    let onCancel: () -> Void
+    let onRefresh: (() -> Void)?
     
-    @State private var isExpanded = false
-    @State private var editingToken = ""
-    @State private var isEditing = false
+    @State private var originalValue: String = ""  // 保存原始值用于取消
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            // 头部信息
+            // 标题和状态
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(tokenName)
+                    Text(title)
                         .font(.headline)
-                    Text(tokenDescription)
+                        .foregroundColor(.primary)
+                    
+                    Text(description)
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .lineLimit(2)
                 }
                 
                 Spacer()
                 
                 HStack(spacing: 8) {
-                    if !tokenValue.isEmpty {
-                        Button(action: onRefreshUsage) {
+                    // 状态指示器
+                    Image(systemName: value.isEmpty ? "xmark.circle" : "checkmark.circle.fill")
+                        .foregroundColor(value.isEmpty ? .red : .green)
+                        .font(.title2)
+                    
+                    // 刷新按钮
+                    if !value.isEmpty && onRefresh != nil {
+                        Button(action: { onRefresh?() }) {
                             Image(systemName: "arrow.clockwise")
-                                .font(.caption)
                                 .foregroundColor(.blue)
                         }
                         .disabled(isLoadingUsage)
                     }
-                    
-                    Button(action: {
-                        withAnimation {
-                            isExpanded.toggle()
-                        }
-                    }) {
-                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                            .font(.caption)
-                            .foregroundColor(.gray)
-                    }
                 }
             }
             
-            // Token状态和用量信息
-            if !tokenValue.isEmpty {
+            // 编辑区域或显示区域
+            if isEditing {
+                VStack(alignment: .leading, spacing: 8) {
+                    TextField("请输入\(title)", text: $value)
+                        .textFieldStyle(RoundedBorderTextFieldStyle())
+                        .autocapitalization(.none)
+                        .disableAutocorrection(true)
+                        .onAppear {
+                            originalValue = value  // 保存原始值
+                        }
+                    
+                    HStack {
+                        Button("取消") {
+                            value = originalValue  // 恢复原始值
+                            onCancel()
+                        }
+                        .foregroundColor(.gray)
+                        
+                        Spacer()
+                        
+                        Button("保存") {
+                            // value已经通过绑定自动保存到@AppStorage了
+                            print("DEBUG: 保存后的value = '\(value)'")
+                            onSave()
+                        }
+                        .foregroundColor(.blue)
+                        .fontWeight(.medium)
+                    }
+                }
+            } else {
+                // 显示当前值
                 HStack {
                     VStack(alignment: .leading, spacing: 4) {
-                        HStack {
-                            Text("状态:")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            Image(systemName: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.green)
-                            Text("已配置")
-                                .font(.caption)
-                                .foregroundColor(.green)
+                        if value.isEmpty {
+                            Text("未配置")
+                                .font(.subheadline)
+                                .foregroundColor(.red)
+                        } else {
+                            Text("已配置 (\(String(value.prefix(8)))...)")
+                                .font(.system(.subheadline, design: .monospaced))
+                                .foregroundColor(.blue)
                         }
                         
+                        // 用量信息
                         if let usage = usageData {
-                            HStack {
-                                Text("用量:")
-                                    .font(.caption)
-                                    .foregroundColor(.secondary)
-                                Text("\(usage.count)")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
+                            HStack(spacing: 4) {
+                                Text("用量：\(usage.count)")
                                     .foregroundColor(.orange)
                                 Text("/")
-                                    .font(.caption)
                                     .foregroundColor(.secondary)
                                 Text(usage.level == 1 && usage.limit == 1 ? "无限制" : "\(usage.limit)")
-                                    .font(.caption)
-                                    .fontWeight(.medium)
                                     .foregroundColor(usage.level == 1 && usage.limit == 1 ? .green : .blue)
                             }
-                            
-                            if usage.level == 2 || (usage.level == 1 && usage.limit > 1) {
-                                let percentage = Double(usage.count) / Double(usage.limit)
-                                ProgressView(value: percentage)
-                                    .progressViewStyle(LinearProgressViewStyle(tint: percentage > 0.8 ? .red : percentage > 0.6 ? .orange : .green))
-                                    .frame(height: 4)
-                            }
+                            .font(.caption)
+                            .fontWeight(.medium)
                         } else if isLoadingUsage {
                             HStack {
                                 ProgressView()
-                                    .scaleEffect(0.5)
-                                Text("加载中...")
-                                    .font(.caption)
+                                    .scaleEffect(0.7)
+                                Text("检查用量中...")
                                     .foregroundColor(.secondary)
                             }
+                            .font(.caption)
                         }
                     }
                     
                     Spacer()
-                }
-            } else {
-                HStack {
-                    Image(systemName: "xmark.circle")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                    Text("未配置")
-                        .font(.caption)
-                        .foregroundColor(.red)
-                    Spacer()
+                    
+                    Button("编辑") {
+                        onEdit()
+                    }
+                    .font(.caption)
+                    .foregroundColor(.blue)
                 }
             }
             
-            // 展开的详细信息
-            if isExpanded {
-                VStack(alignment: .leading, spacing: 8) {
-                    if isEditing {
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("编辑Token")
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                            TextField("请输入\(tokenName)", text: $editingToken)
-                                .textFieldStyle(RoundedBorderTextFieldStyle())
-                                .autocapitalization(.none)
-                                .disableAutocorrection(true)
-                            
-                            HStack {
-                                Button("取消") {
-                                    isEditing = false
-                                    editingToken = tokenValue
-                                }
-                                .foregroundColor(.gray)
-                                
-                                Spacer()
-                                
-                                Button("保存") {
-                                    onTokenChange(editingToken)
-                                    isEditing = false
-                                }
-                                .foregroundColor(.blue)
-                                .disabled(editingToken.isEmpty)
-                            }
-                        }
-                    } else {
-                        HStack {
-                            Text("Token值:")
-                                .font(.caption)
-                                .foregroundColor(.secondary)
-                            
-                            if tokenValue.isEmpty {
-                                Text("未设置")
-                                    .font(.caption)
-                                    .foregroundColor(.gray)
-                            } else {
-                                Text(String(tokenValue.prefix(10)) + "...")
-                                    .font(.caption.monospaced())
-                                    .foregroundColor(.blue)
-                            }
-                            
-                            Spacer()
-                            
-                            Button("编辑") {
-                                editingToken = tokenValue
-                                isEditing = true
-                            }
-                            .font(.caption)
-                            .foregroundColor(.blue)
-                        }
+            // 用量进度条
+            if let usage = usageData, usage.level == 2 || (usage.level == 1 && usage.limit > 1) {
+                let percentage = Double(usage.count) / Double(usage.limit)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack {
+                        Text("使用进度")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                        Spacer()
+                        Text("\(Int(percentage * 100))%")
+                            .font(.caption2)
+                            .fontWeight(.medium)
+                            .foregroundColor(percentage > 0.8 ? .red : percentage > 0.6 ? .orange : .green)
                     }
                     
-                    if let usage = usageData {
-                        Divider()
-                        
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text("详细信息")
-                                .font(.caption)
-                                .fontWeight(.medium)
-                                .foregroundColor(.secondary)
-                            
-                            HStack {
-                                Text("Token版本:")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                Text("V\(usage.level)")
-                                    .font(.caption2)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(usage.level == 2 ? .purple : .blue)
-                                
-                                Spacer()
-                                
-                                Text("状态:")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                Text(usage.status == 1 ? "正常" : "异常")
-                                    .font(.caption2)
-                                    .fontWeight(.medium)
-                                    .foregroundColor(usage.status == 1 ? .green : .red)
-                            }
-                            
-                            HStack {
-                                Text("最后更新:")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                                Text(usage.datetime)
-                                    .font(.caption2.monospaced())
-                                    .foregroundColor(.gray)
-                                
-                                Spacer()
-                            }
-                        }
-                    }
+                    ProgressView(value: percentage)
+                        .progressViewStyle(LinearProgressViewStyle(tint: percentage > 0.8 ? .red : percentage > 0.6 ? .orange : .green))
+                        .frame(height: 6)
                 }
-                .padding(.top, 8)
             }
         }
-        .padding(.vertical, 4)
+        .padding(.vertical, 8)
     }
 }
 
