@@ -759,16 +759,12 @@ struct DashboardView: View {
                 // 周副本完成进度（圆形进度条）
                 Section {
                     WeeklyProgressRow()
+                    WeeklyCdStatusCard()
                 }
                 
                 // 全局数据统计
                 Section {
                     GlobalStatsRows()
-                }
-                
-                // 本周副本状态
-                Section {
-                    WeeklyCdStatusCard()
                 }
                 
                 // 全局进行中任务

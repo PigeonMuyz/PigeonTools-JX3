@@ -16,16 +16,16 @@ struct WeeklyCdStatusCard: View {
     @State private var hasAutoLoaded = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 12) {
             // 标题
             HStack {
                 Image(systemName: "clock.circle.fill")
                     .foregroundColor(.blue)
-                    .font(.title2)
+                    .font(.title3)
                 
                 Text("本周副本状态")
-                    .font(.headline)
-                    .fontWeight(.bold)
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
                 
                 Spacer()
                 
@@ -37,6 +37,7 @@ struct WeeklyCdStatusCard: View {
                     }) {
                         Image(systemName: "arrow.clockwise")
                             .foregroundColor(.blue)
+                            .font(.caption)
                     }
                     .disabled(isLoading)
                 }
@@ -87,9 +88,8 @@ struct WeeklyCdStatusCard: View {
                 .padding(.vertical, 20)
             }
         }
-        .padding()
-        .background(Color(.systemGray6))
-        .cornerRadius(16)
+        .padding(.horizontal)
+        .padding(.vertical, 8)
         .alert("查询失败", isPresented: $showingError) {
             Button("确定") { }
         } message: {
@@ -133,7 +133,7 @@ struct WeeklyCdStatusCard: View {
             LazyVGrid(columns: [
                 GridItem(.flexible()),
                 GridItem(.flexible())
-            ], spacing: 12) {
+            ], spacing: 8) {
                 ForEach(data.data) { dungeonInfo in
                     DungeonCdCard(dungeonInfo: dungeonInfo)
                 }
@@ -220,10 +220,9 @@ struct DungeonCdCard: View {
                 }
             }
         }
-        .padding(12)
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .shadow(color: Color.black.opacity(0.1), radius: 2, x: 0, y: 1)
+        .padding(8)
+        .background(Color(.systemGray6))
+        .cornerRadius(8)
     }
 }
 
