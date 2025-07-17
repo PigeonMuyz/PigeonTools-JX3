@@ -106,11 +106,6 @@ struct YearlyRowView: View {
                             .foregroundColor(.purple)
                     }
                     
-                    if yearlyData.userMarkedAchievements > 0 {
-                        Text("用户标记成就: \(yearlyData.userMarkedAchievements)个")
-                            .font(.caption)
-                            .foregroundColor(.cyan)
-                    }
                 }
             } else {
                 Text("本年度无副本完成记录")
@@ -168,7 +163,6 @@ struct YearlyDetailView: View {
                         Text("副本耗时对比").tag(1)
                         Text("掉落统计").tag(2)
                         Text("月度趋势").tag(3)
-                        Text("成就完成").tag(4)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
@@ -187,8 +181,6 @@ struct YearlyDetailView: View {
                         )
                     case 3:
                         MonthlyTrendView(records: yearRecords, report: report)
-                    case 4:
-                        YearlyAchievementView(records: yearRecords, report: report)
                     default:
                         EmptyView()
                     }
@@ -227,7 +219,7 @@ struct YearlyReportOverviewCard: View {
     }
     
     private var userMarkedAchievements: Int {
-        AchievementCompletionService.shared.getCompletedAchievements().count
+        0  // 不再显示成就统计
     }
     
     var body: some View {
@@ -240,6 +232,7 @@ struct YearlyReportOverviewCard: View {
             }
             
             LazyVGrid(columns: [
+                GridItem(.flexible()),
                 GridItem(.flexible()),
                 GridItem(.flexible())
             ], spacing: 16) {
@@ -262,13 +255,6 @@ struct YearlyReportOverviewCard: View {
                     value: "\(dungeonCompletions.count)",
                     subtitle: "个",
                     color: .orange
-                )
-                
-                OverviewMetric(
-                    title: "用户标记成就",
-                    value: "\(userMarkedAchievements)",
-                    subtitle: "个",
-                    color: .cyan
                 )
             }
             
@@ -352,22 +338,6 @@ struct YearlyDungeonTimeComparisonView: View {
         let grouped = Dictionary(grouping: records) { $0.dungeonName }
         
         let results = grouped.map { (dungeonName, dungeonRecords) -> EnhancedDungeonTimeComparison in
-            // 按角色分组
-            let characterGroups = Dictionary(grouping: dungeonRecords) { record in
-                "\(record.character.server)-\(record.character.name)"
-            }
-            
-            // 生成角色时间数据
-            let characterTimes = characterGroups.compactMap { (key, records) -> CharacterTimeData? in
-                guard let firstRecord = records.first else { return nil }
-                let averageTime = records.reduce(0) { $0 + $1.duration } / Double(records.count)
-                return CharacterTimeData(
-                    character: firstRecord.character,
-                    averageTime: averageTime,
-                    completions: records.count
-                )
-            }.sorted { $0.averageTime < $1.averageTime }
-            
             // 计算全副本平均时间
             let totalDuration = dungeonRecords.reduce(0) { $0 + $1.duration }
             let totalCompletions = dungeonRecords.count
@@ -375,14 +345,14 @@ struct YearlyDungeonTimeComparisonView: View {
             
             return EnhancedDungeonTimeComparison(
                 dungeonName: dungeonName,
-                characterTimes: characterTimes,
+                characterTimes: [],  // 不再需要角色时间数据
                 globalAverageTime: globalAverageTime,
                 totalCompletions: totalCompletions,
                 weekPeriod: report.displayTitle
             )
         }
         
-        return results.sorted { $0.dungeonName < $1.dungeonName }
+        return results.sorted { $0.totalCompletions > $1.totalCompletions }  // 按次数降序排序
     }
     
     var body: some View {
@@ -408,6 +378,30 @@ struct YearlyDropStatisticsView: View {
         DropSummaryData(records: records, recordsWithDrops: recordsWithDrops, dungeonManager: dungeonManager)
     }
     
+    private var dungeonDropSummaries: [DungeonDropSummary] {
+        let grouped = Dictionary(grouping: recordsWithDrops) { $0.dungeonName }
+        
+        return grouped.map { (dungeonName, records) in
+            let dropEvents = records.flatMap { record -> [DropEvent] in
+                record.drops.map { drop in
+                    DropEvent(
+                        itemName: drop.name,
+                        itemColor: drop.color,
+                        dungeonName: record.dungeonName,
+                        runNumber: dungeonManager.getCharacterRunNumber(for: record),
+                        time: record.completedDate
+                    )
+                }
+            }.sorted { $0.time > $1.time }
+            
+            return DungeonDropSummary(
+                dungeonName: dungeonName,
+                totalDrops: dropEvents.count,
+                dropEvents: dropEvents
+            )
+        }.sorted { $0.totalDrops > $1.totalDrops }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             // 掉落总览
@@ -426,6 +420,16 @@ struct YearlyDropStatisticsView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {
+                // 副本掉落详情
+                Text("副本掉落详情")
+                    .font(.headline)
+                    .padding(.horizontal)
+                
+                ForEach(dungeonDropSummaries) { dungeonSummary in
+                    DungeonDropSummaryCard(summary: dungeonSummary)
+                }
+                
+                // 角色掉落详情
                 Text("角色掉落详情")
                     .font(.headline)
                     .padding(.horizontal)
@@ -705,8 +709,8 @@ struct YearlyTaskData {
             mostRunDungeon = (mostRun.key, mostRun.value)
         }
         
-        // 获取用户标记的成就数量
-        userMarkedAchievements = AchievementCompletionService.shared.getCompletedAchievements().count
+        // 不再显示用户标记成就
+        userMarkedAchievements = 0
     }
 }
 

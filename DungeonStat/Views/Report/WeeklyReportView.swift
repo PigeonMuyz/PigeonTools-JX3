@@ -147,12 +147,11 @@ struct WeeklyDetailView: View {
                 TaskOverviewCard(records: weekRecords)
                 
                 if !weekRecords.isEmpty {
-                    // 选项卡 - 保持原有的tab切换功能
+                    // 选项卡 - 去掉任务完成统计
                     Picker("统计类型", selection: $selectedTab) {
                         Text("角色完成情况").tag(0)
                         Text("副本耗时对比").tag(1)
                         Text("掉落统计").tag(2)
-                        Text("任务完成统计").tag(3)
                     }
                     .pickerStyle(SegmentedPickerStyle())
                     .padding(.horizontal)
@@ -169,8 +168,6 @@ struct WeeklyDetailView: View {
                             recordsWithDrops: recordsWithDrops,
                             dungeonManager: dungeonManager
                         )
-                    case 3:
-                        WeeklyTaskCompletionView(report: report, dungeonManager: dungeonManager)
                     default:
                         EmptyView()
                     }
@@ -204,6 +201,30 @@ struct DropStatisticsView: View {
         DropSummaryData(records: records, recordsWithDrops: recordsWithDrops, dungeonManager: dungeonManager)
     }
     
+    private var dungeonDropSummaries: [DungeonDropSummary] {
+        let grouped = Dictionary(grouping: recordsWithDrops) { $0.dungeonName }
+        
+        return grouped.map { (dungeonName, records) in
+            let dropEvents = records.flatMap { record -> [DropEvent] in
+                record.drops.map { drop in
+                    DropEvent(
+                        itemName: drop.name,
+                        itemColor: drop.color,
+                        dungeonName: record.dungeonName,
+                        runNumber: dungeonManager.getCharacterRunNumber(for: record),
+                        time: record.completedDate
+                    )
+                }
+            }.sorted { $0.time > $1.time }
+            
+            return DungeonDropSummary(
+                dungeonName: dungeonName,
+                totalDrops: dropEvents.count,
+                dropEvents: dropEvents
+            )
+        }.sorted { $0.totalDrops > $1.totalDrops }
+    }
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
             // 掉落总览
@@ -223,6 +244,15 @@ struct DropStatisticsView: View {
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 40)
             } else {
+                // 副本掉落详情
+                Text("副本掉落详情")
+                    .font(.headline)
+                    .padding(.horizontal)
+                
+                ForEach(dungeonDropSummaries) { dungeonSummary in
+                    DungeonDropSummaryCard(summary: dungeonSummary)
+                }
+                
                 // 角色掉落详情
                 Text("角色掉落详情")
                     .font(.headline)
@@ -285,30 +315,102 @@ struct DropSummaryCard: View {
     }
 }
 
+// MARK: - 新增：副本掉落详情卡片
+struct DungeonDropSummaryCard: View {
+    let summary: DungeonDropSummary
+    @State private var isExpanded = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // 副本信息
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack {
+                    Image(systemName: "building.2.fill")
+                        .font(.title3)
+                        .foregroundColor(.orange)
+                    
+                    Text(summary.dungeonName)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text("掉落 \(summary.totalDrops) 个物品")
+                        .font(.subheadline)
+                        .foregroundColor(.orange)
+                        .fontWeight(.medium)
+                    
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // 掉落列表 - 可展开
+            if isExpanded {
+                VStack(spacing: 8) {
+                    ForEach(summary.dropEvents) { event in
+                        DropEventRow(event: event)
+                    }
+                }
+            }
+        }
+        .padding()
+        .background(Color(.systemGray6))
+        .cornerRadius(12)
+        .padding(.horizontal)
+    }
+}
+
 // MARK: - 新增：角色掉落详情卡片
 struct CharacterDropSummaryCard: View {
     let summary: CharacterDropSummary
+    @State private var isExpanded = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             // 角色信息
-            HStack {
-                Text(summary.character.displayName)
-                    .font(.headline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                Text("获得 \(summary.totalItems) 个物品")
-                    .font(.subheadline)
-                    .foregroundColor(.purple)
-                    .fontWeight(.medium)
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.3)) {
+                    isExpanded.toggle()
+                }
+            }) {
+                HStack {
+                    Image(systemName: "person.circle.fill")
+                        .font(.title3)
+                        .foregroundColor(.blue)
+                    
+                    Text(summary.character.displayName)
+                        .font(.headline)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.primary)
+                    
+                    Spacer()
+                    
+                    Text("获得 \(summary.totalItems) 个物品")
+                        .font(.subheadline)
+                        .foregroundColor(.purple)
+                        .fontWeight(.medium)
+                    
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                        .font(.caption)
+                        .foregroundColor(.blue)
+                }
             }
+            .buttonStyle(PlainButtonStyle())
             
-            // 掉落列表
-            VStack(spacing: 8) {
-                ForEach(summary.dropEvents) { event in
-                    DropEventRow(event: event)
+            // 掉落列表 - 可展开
+            if isExpanded {
+                VStack(spacing: 8) {
+                    ForEach(summary.dropEvents) { event in
+                        DropEventRow(event: event)
+                    }
                 }
             }
         }
@@ -797,6 +899,13 @@ struct DropEvent: Identifiable {
     let time: Date
 }
 
+struct DungeonDropSummary: Identifiable {
+    let id = UUID()
+    let dungeonName: String
+    let totalDrops: Int
+    let dropEvents: [DropEvent]
+}
+
 // MARK: - 任务完成统计视图
 struct WeeklyTaskCompletionView: View {
     let report: DynamicWeeklyReport
@@ -851,22 +960,6 @@ struct EnhancedDungeonTimeComparisonView: View {
         let grouped = Dictionary(grouping: records) { $0.dungeonName }
         
         let results = grouped.map { (dungeonName, dungeonRecords) -> EnhancedDungeonTimeComparison in
-            // 按角色分组
-            let characterGroups = Dictionary(grouping: dungeonRecords) { record in
-                "\(record.character.server)-\(record.character.name)"
-            }
-            
-            // 生成角色时间数据
-            let characterTimes = characterGroups.compactMap { (key, records) -> CharacterTimeData? in
-                guard let firstRecord = records.first else { return nil }
-                let averageTime = records.reduce(0) { $0 + $1.duration } / Double(records.count)
-                return CharacterTimeData(
-                    character: firstRecord.character,
-                    averageTime: averageTime,
-                    completions: records.count
-                )
-            }.sorted { $0.averageTime < $1.averageTime }
-            
             // 计算全副本平均时间
             let totalDuration = dungeonRecords.reduce(0) { $0 + $1.duration }
             let totalCompletions = dungeonRecords.count
@@ -879,14 +972,14 @@ struct EnhancedDungeonTimeComparisonView: View {
             
             return EnhancedDungeonTimeComparison(
                 dungeonName: dungeonName,
-                characterTimes: characterTimes,
+                characterTimes: [],  // 不再需要角色时间数据
                 globalAverageTime: globalAverageTime,
                 totalCompletions: totalCompletions,
                 weekPeriod: weekPeriod
             )
         }
         
-        return results.sorted { $0.dungeonName < $1.dungeonName }
+        return results.sorted { $0.totalCompletions > $1.totalCompletions }  // 按次数降序排序
     }
     
     var body: some View {
@@ -1082,7 +1175,7 @@ struct EnhancedDungeonTimeCard: View {
                 
                 HStack(spacing: 16) {
                     HStack {
-                        Text("本周总完成次数:")
+                        Text("总完成次数:")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Text("\(comparison.totalCompletions)")
@@ -1092,7 +1185,7 @@ struct EnhancedDungeonTimeCard: View {
                     }
                     
                     HStack {
-                        Text("本周平均用时:")
+                        Text("平均用时:")
                             .font(.caption)
                             .foregroundColor(.secondary)
                         Text(formatDurationShort(comparison.globalAverageTime))
@@ -1109,61 +1202,6 @@ struct EnhancedDungeonTimeCard: View {
                     .foregroundColor(.secondary)
             }
             .padding(.horizontal)
-            
-            if comparison.characterTimes.count > 1 {
-                Chart(comparison.characterTimes) { timeData in
-                    BarMark(
-                        x: .value("角色", timeData.character.name),
-                        y: .value("平均耗时", timeData.averageTime / 60)
-                    )
-                    .foregroundStyle(.orange.gradient)
-                    .annotation(position: .top) {
-                        VStack(spacing: 2) {
-                            Text(formatDurationShort(timeData.averageTime))
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                            Text("(\(timeData.completions)次)")
-                                .font(.caption2)
-                                .foregroundColor(.secondary)
-                        }
-                    }
-                }
-                .frame(height: 150)
-                .padding(.horizontal)
-            }
-            
-            // 详细数据列表
-            VStack(spacing: 6) {
-                ForEach(comparison.characterTimes) { timeData in
-                    HStack {
-                        Text(timeData.character.name)
-                            .font(.subheadline)
-                        
-                        Spacer()
-                        
-                        Text("\(timeData.completions)次")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Text("平均 \(formatDurationShort(timeData.averageTime))")
-                            .font(.subheadline)
-                            .foregroundColor(.orange)
-                            .fontWeight(.medium)
-                        
-                        // 与副本平均时间对比
-                        if comparison.totalCompletions > 1 {
-                            let difference = timeData.averageTime - comparison.globalAverageTime
-                            let isImprovement = difference < 0
-                            
-                            Text(isImprovement ? "快\(formatDurationShort(abs(difference)))" : "慢\(formatDurationShort(difference))")
-                                .font(.caption)
-                                .foregroundColor(isImprovement ? .green : .red)
-                                .fontWeight(.medium)
-                        }
-                    }
-                    .padding(.horizontal)
-                }
-            }
         }
         .padding(.vertical)
         .background(Color(.systemGray6))

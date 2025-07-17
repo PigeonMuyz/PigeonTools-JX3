@@ -692,6 +692,7 @@ struct FeatureRow: View {
 // MARK: - 统计页面（合并周报告功能）
 struct StatisticsView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
+    @State private var showingYearlyReport = false
     
     var body: some View {
         NavigationView {
@@ -710,7 +711,9 @@ struct StatisticsView: View {
             .navigationTitle("统计")
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    NavigationLink(destination: YearlyReportView().environmentObject(dungeonManager)) {
+                    Button(action: {
+                        showingYearlyReport = true
+                    }) {
                         HStack(spacing: 4) {
                             Image(systemName: "chart.bar.fill")
                             Text("年统计")
@@ -730,6 +733,10 @@ struct StatisticsView: View {
                     }
                     .foregroundColor(.orange)
                 }
+            }
+            .sheet(isPresented: $showingYearlyReport) {
+                YearlyReportView()
+                    .environmentObject(dungeonManager)
             }
         }
     }
@@ -1036,12 +1043,14 @@ struct WeeklyProgressRow: View {
     }
     
     private var currentWeekCount: Int {
-        let calendar = Calendar.current
-        let now = Date()
-        let startOfWeek = calendar.dateInterval(of: .weekOfYear, for: now)?.start ?? now
+        let currentGameWeekStart = StatisticsManager.shared.getGameWeekStart(for: Date())
+        guard let currentGameWeekEnd = Calendar.current.date(byAdding: .day, value: 7, to: currentGameWeekStart),
+              let gameWeekEndFinal = Calendar.current.date(byAdding: .minute, value: -1, to: currentGameWeekEnd) else {
+            return 0
+        }
         
         return dungeonManager.completionRecords.filter { record in
-            record.completedDate >= startOfWeek
+            record.completedDate >= currentGameWeekStart && record.completedDate <= gameWeekEndFinal
         }.count
     }
     
@@ -1248,13 +1257,15 @@ struct GlobalStatsRows: View {
     
     // 本周完成数
     private var globalWeeklyCompletedCount: Int {
-        var total = 0
-        for character in dungeonManager.characters {
-            for dungeon in dungeonManager.dungeons {
-                total += dungeon.weeklyCount(for: character)
-            }
+        let currentGameWeekStart = StatisticsManager.shared.getGameWeekStart(for: Date())
+        guard let currentGameWeekEnd = Calendar.current.date(byAdding: .day, value: 7, to: currentGameWeekStart),
+              let gameWeekEndFinal = Calendar.current.date(byAdding: .minute, value: -1, to: currentGameWeekEnd) else {
+            return 0
         }
-        return total
+        
+        return dungeonManager.completionRecords.filter { record in
+            record.completedDate >= currentGameWeekStart && record.completedDate <= gameWeekEndFinal
+        }.count
     }
 }
 
@@ -1461,9 +1472,19 @@ struct CharacterBreakdownRows: View {
     }
     
     private func weeklyCount(for character: GameCharacter) -> Int {
-        dungeonManager.dungeons.reduce(0) { total, dungeon in
-            total + dungeon.weeklyCount(for: character)
+        let currentGameWeekStart = StatisticsManager.shared.getGameWeekStart(for: Date())
+        guard let currentGameWeekEnd = Calendar.current.date(byAdding: .day, value: 7, to: currentGameWeekStart),
+              let gameWeekEndFinal = Calendar.current.date(byAdding: .minute, value: -1, to: currentGameWeekEnd) else {
+            return 0
         }
+        
+        return dungeonManager.completionRecords.filter { record in
+            record.completedDate >= currentGameWeekStart && 
+            record.completedDate <= gameWeekEndFinal &&
+            record.character.server == character.server &&
+            record.character.name == character.name &&
+            record.character.school == character.school
+        }.count
     }
 }
 
