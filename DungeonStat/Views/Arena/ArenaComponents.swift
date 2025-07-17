@@ -57,9 +57,9 @@ struct ArenaModeListSection: View {
             }
             
             // MMR趋势（如果有数据）
-            if !data.trend.isEmpty {
+            if let trend = data.trend, !trend.isEmpty {
                 Section(header: Text("MMR趋势")) {
-                    ArenaTrendChart(trendData: data.trend)
+                    ArenaTrendChart(trendData: trend)
                 }
             }
         }
@@ -120,8 +120,8 @@ struct ArenaModeSection: View {
             }
             
             // MMR趋势（如果有数据）
-            if !data.trend.isEmpty {
-                ArenaTrendChart(trendData: data.trend)
+            if let trend = data.trend, !trend.isEmpty {
+                ArenaTrendChart(trendData: trend)
             }
         }
         .padding()

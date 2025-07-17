@@ -157,7 +157,51 @@ struct ArenaRecordData: Codable {
     let personAvatar: String?
     let performance: [String: ArenaPerformance]
     let history: [ArenaHistoryRecord]
-    let trend: [ArenaTrendData]
+    let trend: [ArenaTrendData]?
+    
+    enum CodingKeys: String, CodingKey {
+        case zoneName, serverName, roleName, roleId, globalRoleId
+        case forceName, forceId, bodyName, bodyId, tongName, tongId
+        case campName, campId, personName, personId, personAvatar
+        case performance, history, trend
+    }
+    
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        
+        zoneName = try container.decode(String.self, forKey: .zoneName)
+        serverName = try container.decode(String.self, forKey: .serverName)
+        roleName = try container.decode(String.self, forKey: .roleName)
+        roleId = try container.decode(String.self, forKey: .roleId)
+        globalRoleId = try container.decode(String.self, forKey: .globalRoleId)
+        forceName = try container.decode(String.self, forKey: .forceName)
+        forceId = try container.decode(String.self, forKey: .forceId)
+        bodyName = try container.decode(String.self, forKey: .bodyName)
+        bodyId = try container.decode(String.self, forKey: .bodyId)
+        tongName = try container.decodeIfPresent(String.self, forKey: .tongName)
+        tongId = try container.decodeIfPresent(String.self, forKey: .tongId)
+        campName = try container.decode(String.self, forKey: .campName)
+        campId = try container.decode(String.self, forKey: .campId)
+        personName = try container.decode(String.self, forKey: .personName)
+        personId = try container.decode(String.self, forKey: .personId)
+        personAvatar = try container.decodeIfPresent(String.self, forKey: .personAvatar)
+        history = try container.decode([ArenaHistoryRecord].self, forKey: .history)
+        trend = try container.decodeIfPresent([ArenaTrendData].self, forKey: .trend)
+        
+        // Handle performance data that can be either Dictionary or Array
+        if let performanceDict = try? container.decode([String: ArenaPerformance].self, forKey: .performance) {
+            performance = performanceDict
+        } else if let performanceArray = try? container.decode([ArenaPerformance].self, forKey: .performance) {
+            // Convert array to dictionary using pvpType as key
+            var performanceDict: [String: ArenaPerformance] = [:]
+            for perf in performanceArray {
+                performanceDict[perf.pvpType] = perf
+            }
+            performance = performanceDict
+        } else {
+            performance = [:]
+        }
+    }
 }
 
 struct ArenaPerformance: Codable {
