@@ -766,6 +766,11 @@ struct DashboardView: View {
                     GlobalStatsRows()
                 }
                 
+                // 本周副本状态
+                Section {
+                    WeeklyCdStatusCard()
+                }
+                
                 // 全局进行中任务
                 Section {
                     AllInProgressTasksRows()

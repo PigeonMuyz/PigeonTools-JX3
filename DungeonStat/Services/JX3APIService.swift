@@ -644,4 +644,104 @@ class JX3APIService {
         
         return detailData
     }
+    
+    // MARK: - Team CD List API
+    func fetchTeamCdList(server: String, name: String) async throws -> TeamCdData {
+        guard !token.isEmpty else {
+            throw APIError.apiError("获取副本CD需要配置Token")
+        }
+        
+        let urlString = "https://www.jx3api.com/data/role/teamCdList"
+        guard var urlComponents = URLComponents(string: urlString) else {
+            throw APIError.invalidURL
+        }
+        
+        urlComponents.queryItems = [
+            URLQueryItem(name: "server", value: server),
+            URLQueryItem(name: "name", value: name),
+            URLQueryItem(name: "token", value: token),
+            URLQueryItem(name: "ticket", value: ticket)
+        ]
+        
+        guard let url = urlComponents.url else {
+            throw APIError.invalidURL
+        }
+        
+        let (data, response) = try await URLSession.shared.data(from: url)
+        
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw APIError.networkError
+        }
+        
+        guard httpResponse.statusCode == 200 else {
+            throw APIError.networkError
+        }
+        
+        let apiResponse = try JSONDecoder().decode(TeamCdResponse.self, from: data)
+        
+        guard apiResponse.code == 200, let teamCdData = apiResponse.data else {
+            throw APIError.apiError(apiResponse.msg)
+        }
+        
+        return teamCdData
+    }
+}
+
+// MARK: - Team CD Data Models
+struct TeamCdResponse: Codable {
+    let code: Int
+    let msg: String
+    let data: TeamCdData?
+    let time: Int
+}
+
+struct TeamCdData: Codable {
+    let zoneName: String
+    let serverName: String
+    let roleName: String
+    let roleId: String
+    let globalRoleId: String
+    let forceName: String
+    let forceId: String
+    let bodyName: String
+    let bodyId: String
+    let tongName: String?
+    let tongId: String?
+    let campName: String
+    let campId: String
+    let personName: String
+    let personId: String
+    let personAvatar: String?
+    let data: [DungeonCdInfo]
+}
+
+struct DungeonCdInfo: Codable, Identifiable {
+    let mapIcon: String
+    let mapId: String
+    let mapName: String
+    let mapType: String
+    let bossCount: Int
+    let bossFinished: Int
+    let bossProgress: [BossProgress]
+    
+    var id: String { mapId }
+    
+    var progressPercentage: Double {
+        guard bossCount > 0 else { return 0.0 }
+        return Double(bossFinished) / Double(bossCount)
+    }
+    
+    var isCompleted: Bool {
+        return bossFinished == bossCount
+    }
+}
+
+struct BossProgress: Codable, Identifiable {
+    let finished: Bool
+    let icon: String
+    let index: String
+    let name: String
+    let progressId: String
+    
+    var id: String { progressId }
 }
