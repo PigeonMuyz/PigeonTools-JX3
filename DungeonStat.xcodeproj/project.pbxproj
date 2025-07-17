@@ -22,7 +22,6 @@
 /* Begin PBXFileReference section */
 		C46A90602E13843A001FB803 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
 		C46A90622E13843A001FB803 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
-		C46A90782E1384B5001FB803 /* DungeonWidgetExtensionExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = DungeonWidgetExtensionExtension.entitlements; sourceTree = "<group>"; };
 		C4EDF5A92E123FCC002EDDE5 /* DungeonStat.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = DungeonStat.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -70,7 +69,6 @@
 		C4EDF5A02E123FCC002EDDE5 = {
 			isa = PBXGroup;
 			children = (
-				C46A90782E1384B5001FB803 /* DungeonWidgetExtensionExtension.entitlements */,
 				C4EDF5AB2E123FCC002EDDE5 /* DungeonStat */,
 				C46A905F2E13843A001FB803 /* Frameworks */,
 				C4EDF5AA2E123FCC002EDDE5 /* Products */,
