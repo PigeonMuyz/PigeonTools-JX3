@@ -8,6 +8,7 @@
 import SwiftUI
 
 struct WeeklyCdStatusCard: View {
+    let refreshTrigger: Int
     @EnvironmentObject var dungeonManager: DungeonManager
     @State private var teamCdData: TeamCdData?
     @State private var isLoading = false
@@ -15,34 +16,12 @@ struct WeeklyCdStatusCard: View {
     @State private var showingError = false
     @State private var hasAutoLoaded = false
     
+    init(refreshTrigger: Int = 0) {
+        self.refreshTrigger = refreshTrigger
+    }
+    
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 标题
-            HStack {
-                Image(systemName: "clock.circle.fill")
-                    .foregroundColor(.blue)
-                    .font(.title3)
-                
-                Text("本周副本状态")
-                    .font(.subheadline)
-                    .fontWeight(.semibold)
-                
-                Spacer()
-                
-                if let selectedCharacter = dungeonManager.selectedCharacter {
-                    Button(action: {
-                        Task {
-                            await loadTeamCdData(for: selectedCharacter)
-                        }
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .foregroundColor(.blue)
-                            .font(.caption)
-                    }
-                    .disabled(isLoading)
-                }
-            }
-            
+        Group {
             if isLoading {
                 HStack {
                     ProgressView()
@@ -88,8 +67,6 @@ struct WeeklyCdStatusCard: View {
                 .padding(.vertical, 20)
             }
         }
-        .padding(.horizontal)
-        .padding(.vertical, 8)
         .alert("查询失败", isPresented: $showingError) {
             Button("确定") { }
         } message: {
@@ -113,6 +90,13 @@ struct WeeklyCdStatusCard: View {
                 errorMessage = nil
             }
         }
+        .onChange(of: refreshTrigger) { _, _ in
+            if let selectedCharacter = dungeonManager.selectedCharacter {
+                Task {
+                    await loadTeamCdData(for: selectedCharacter)
+                }
+            }
+        }
     }
     
     @ViewBuilder
@@ -130,13 +114,8 @@ struct WeeklyCdStatusCard: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, 20)
         } else {
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: 8) {
-                ForEach(data.data) { dungeonInfo in
-                    DungeonCdCard(dungeonInfo: dungeonInfo)
-                }
+            ForEach(data.data) { dungeonInfo in
+                DungeonCdRow(dungeonInfo: dungeonInfo)
             }
         }
     }
@@ -165,64 +144,46 @@ struct WeeklyCdStatusCard: View {
     }
 }
 
-struct DungeonCdCard: View {
+struct DungeonCdRow: View {
     let dungeonInfo: DungeonCdInfo
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            // 副本名称和类型
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 12) {
+            // 完成状态图标
+            Image(systemName: dungeonInfo.isCompleted ? "checkmark.circle.fill" : "clock.circle.fill")
+                .foregroundColor(dungeonInfo.isCompleted ? .green : .orange)
+                .font(.title3)
+                .frame(width: 24)
+            
+            // 副本信息
+            VStack(alignment: .leading, spacing: 4) {
+                HStack {
                     Text(dungeonInfo.mapName)
                         .font(.subheadline)
                         .fontWeight(.medium)
-                        .lineLimit(1)
+                    
+                    Spacer()
                     
                     Text(dungeonInfo.mapType)
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 
-                Spacer()
-                
-                // 完成状态图标
-                Image(systemName: dungeonInfo.isCompleted ? "checkmark.circle.fill" : "clock.circle.fill")
-                    .foregroundColor(dungeonInfo.isCompleted ? .green : .orange)
-                    .font(.title3)
-            }
-            
-            // 进度条
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text("进度")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
+                // 进度条和进度文本
+                HStack(spacing: 8) {
+                    ProgressView(value: dungeonInfo.progressPercentage)
+                        .progressViewStyle(LinearProgressViewStyle())
+                        .accentColor(dungeonInfo.isCompleted ? .green : .blue)
                     
                     Text("\(dungeonInfo.bossFinished)/\(dungeonInfo.bossCount)")
                         .font(.caption)
                         .fontWeight(.medium)
                         .foregroundColor(dungeonInfo.isCompleted ? .green : .primary)
-                }
-                
-                ProgressView(value: dungeonInfo.progressPercentage)
-                    .progressViewStyle(LinearProgressViewStyle())
-                    .accentColor(dungeonInfo.isCompleted ? .green : .blue)
-            }
-            
-            // Boss详情（可选显示）
-            if dungeonInfo.bossCount <= 4 {
-                LazyVGrid(columns: Array(repeating: GridItem(.flexible()), count: min(dungeonInfo.bossCount, 4)), spacing: 4) {
-                    ForEach(dungeonInfo.bossProgress) { boss in
-                        BossStatusView(boss: boss)
-                    }
+                        .frame(minWidth: 30)
                 }
             }
         }
-        .padding(8)
-        .background(Color(.systemGray6))
-        .cornerRadius(8)
+        .padding(.vertical, 4)
     }
 }
 
@@ -245,7 +206,7 @@ struct BossStatusView: View {
 }
 
 #Preview {
-    WeeklyCdStatusCard()
+    WeeklyCdStatusCard(refreshTrigger: 0)
         .environmentObject(DungeonManager())
         .padding()
 }

@@ -747,6 +747,7 @@ struct DashboardView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @State private var showingQuickStart = false
     @State private var showingCharacterSelector = false
+    @State private var weeklyCdRefreshTrigger = 0
     
     var body: some View {
         NavigationView {
@@ -759,7 +760,23 @@ struct DashboardView: View {
                 // 周副本完成进度（圆形进度条）
                 Section {
                     WeeklyProgressRow()
-                    WeeklyCdStatusCard()
+                }
+                
+                // 本周副本状态
+                Section(header: HStack {
+                    Text("本周副本状态")
+                    Spacer()
+                    if dungeonManager.selectedCharacter != nil {
+                        Button(action: {
+                            weeklyCdRefreshTrigger += 1
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.blue)
+                                .font(.caption)
+                        }
+                    }
+                }) {
+                    WeeklyCdStatusCard(refreshTrigger: weeklyCdRefreshTrigger)
                 }
                 
                 // 全局数据统计
