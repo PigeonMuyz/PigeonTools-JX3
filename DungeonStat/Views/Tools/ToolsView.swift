@@ -21,6 +21,7 @@ struct ToolsView: View {
     @State private var showingCharacterDetail = false
     @State private var characterDetailData: CharacterDetailData?
     @State private var isLoadingDetail = false
+    @State private var showingChivalrousEvents = false
     
     var body: some View {
         NavigationView {
@@ -30,6 +31,8 @@ struct ToolsView: View {
                 if let selectedCharacter = dungeonManager.selectedCharacter {
                     currentCharacterSection(selectedCharacter)
                 }
+                
+                gameInfoSection
                 
                 dataManagementSection
             }
@@ -56,6 +59,9 @@ struct ToolsView: View {
                     characterData: characterDetailData,
                     isLoading: isLoadingDetail
                 )
+            }
+            .sheet(isPresented: $showingChivalrousEvents) {
+                ChivalrousEventView()
             }
             .onChange(of: selectedCharacterForCard) { _, newValue in
                 if newValue != nil {
@@ -256,6 +262,37 @@ struct ToolsView: View {
                 
                 Spacer()
             }
+        }
+    }
+    
+    private var gameInfoSection: some View {
+        Section(header: Text("游戏信息")) {
+            Button(action: {
+                showingChivalrousEvents = true
+            }) {
+                HStack {
+                    Image(systemName: "star.circle.fill")
+                        .foregroundColor(.purple)
+                        .frame(width: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("行侠事件")
+                            .font(.headline)
+                            .foregroundColor(.primary)
+                        Text("查询楚天社、云从社、披风会事件")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                    
+                    Image(systemName: "chevron.right")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(PlainButtonStyle())
         }
     }
     
