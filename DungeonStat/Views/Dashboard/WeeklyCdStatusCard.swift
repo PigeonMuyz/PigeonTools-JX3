@@ -114,9 +114,12 @@ struct WeeklyCdStatusCard: View {
             .frame(maxWidth: .infinity, alignment: .center)
             .padding(.vertical, 20)
         } else {
-            ForEach(data.data) { dungeonInfo in
-                DungeonCdRow(dungeonInfo: dungeonInfo)
+            VStack(spacing: 12) {
+                ForEach(data.data) { dungeonInfo in
+                    DungeonCdRow(dungeonInfo: dungeonInfo)
+                }
             }
+            .padding(.horizontal, 4)
         }
     }
     
@@ -146,44 +149,90 @@ struct WeeklyCdStatusCard: View {
 
 struct DungeonCdRow: View {
     let dungeonInfo: DungeonCdInfo
+    @State private var isExpanded = false
     
     var body: some View {
-        HStack(spacing: 12) {
-            // 完成状态图标
-            Image(systemName: dungeonInfo.isCompleted ? "checkmark.circle.fill" : "clock.circle.fill")
-                .foregroundColor(dungeonInfo.isCompleted ? .green : .orange)
-                .font(.title3)
-                .frame(width: 24)
-            
-            // 副本信息
-            VStack(alignment: .leading, spacing: 4) {
-                HStack {
-                    Text(dungeonInfo.mapName)
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+        VStack(spacing: 0) {
+            // 主要的副本信息行
+            Button {
+                withAnimation(.easeInOut(duration: 0.2)) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack(spacing: 12) {
+                    // 完成状态图标
+                    Image(systemName: dungeonInfo.isCompleted ? "checkmark.circle.fill" : "clock.circle.fill")
+                        .foregroundColor(dungeonInfo.isCompleted ? .green : .orange)
+                        .font(.title3)
+                        .frame(width: 24)
                     
-                    Spacer()
+                    // 副本信息
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack {
+                            Text(dungeonInfo.mapName)
+                                .font(.subheadline)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                            
+                            Spacer()
+                            
+                            Text(dungeonInfo.mapType)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                        
+                        // 进度条和进度文本
+                        HStack(spacing: 8) {
+                            ProgressView(value: dungeonInfo.progressPercentage)
+                                .progressViewStyle(LinearProgressViewStyle())
+                                .accentColor(dungeonInfo.isCompleted ? .green : .blue)
+                            
+                            Text("\(dungeonInfo.bossFinished)/\(dungeonInfo.bossCount)")
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(dungeonInfo.isCompleted ? .green : .primary)
+                                .frame(minWidth: 30)
+                        }
+                    }
                     
-                    Text(dungeonInfo.mapType)
+                    // 展开指示器
+                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                        .animation(.easeInOut(duration: 0.2), value: isExpanded)
                 }
-                
-                // 进度条和进度文本
-                HStack(spacing: 8) {
-                    ProgressView(value: dungeonInfo.progressPercentage)
-                        .progressViewStyle(LinearProgressViewStyle())
-                        .accentColor(dungeonInfo.isCompleted ? .green : .blue)
+                .padding(.vertical, 4)
+            }
+            .buttonStyle(PlainButtonStyle())
+            
+            // 展开的boss详情
+            if isExpanded {
+                VStack(spacing: 8) {
+                    Divider()
+                        .padding(.horizontal, 12)
                     
-                    Text("\(dungeonInfo.bossFinished)/\(dungeonInfo.bossCount)")
-                        .font(.caption)
-                        .fontWeight(.medium)
-                        .foregroundColor(dungeonInfo.isCompleted ? .green : .primary)
-                        .frame(minWidth: 30)
+                    if !dungeonInfo.bossProgress.isEmpty {
+                        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 8), count: min(dungeonInfo.bossProgress.count, 4)), spacing: 8) {
+                            ForEach(dungeonInfo.bossProgress) { boss in
+                                BossStatusView(boss: boss)
+                            }
+                        }
+                        .padding(.horizontal, 12)
+                        .padding(.bottom, 8)
+                    } else {
+                        Text("暂无boss信息")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                            .padding(.horizontal, 12)
+                            .padding(.bottom, 8)
+                    }
                 }
+                .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
-        .padding(.vertical, 4)
+        .background(Color(.systemBackground))
+        .cornerRadius(8)
+        .shadow(color: Color.black.opacity(0.05), radius: 2, x: 0, y: 1)
     }
 }
 
@@ -191,17 +240,27 @@ struct BossStatusView: View {
     let boss: BossProgress
     
     var body: some View {
-        VStack(spacing: 2) {
-            Image(systemName: boss.finished ? "checkmark.circle.fill" : "circle")
-                .font(.caption)
-                .foregroundColor(boss.finished ? .green : .gray)
+        VStack(spacing: 4) {
+            // Boss图标或状态
+            ZStack {
+                Circle()
+                    .fill(boss.finished ? Color.green.opacity(0.2) : Color.gray.opacity(0.1))
+                    .frame(width: 32, height: 32)
+                
+                Image(systemName: boss.finished ? "checkmark.circle.fill" : "circle.dashed")
+                    .font(.system(size: 16))
+                    .foregroundColor(boss.finished ? .green : .gray)
+            }
             
+            // Boss名称
             Text(boss.name)
                 .font(.caption2)
-                .foregroundColor(.secondary)
+                .foregroundColor(boss.finished ? .primary : .secondary)
                 .lineLimit(1)
-                .minimumScaleFactor(0.8)
+                .minimumScaleFactor(0.7)
+                .fontWeight(boss.finished ? .medium : .regular)
         }
+        .padding(.vertical, 4)
     }
 }
 
