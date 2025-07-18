@@ -51,8 +51,8 @@ class ServerStatusManager: ObservableObject {
     // 服务器合并映射表
     private let serverMappings: [String: String] = [
         "万象长安": "眉间雪",
-        "有人赴约": "眉间雪",
-        "青梅煮酒": "破阵子"
+        "有人赴约": "山海相逢",
+        "青梅煮酒": "飞龙在天"
     ]
     
     private init() {
@@ -119,7 +119,7 @@ class ServerStatusManager: ObservableObject {
         guard !isLoading else { return }
         
         isLoading = true
-        
+        print("检查服务器状态")
         guard let url = URL(string: "https://www.jx3api.com/data/server/check") else {
             isLoading = false
             return
@@ -144,7 +144,11 @@ class ServerStatusManager: ObservableObject {
     }
     
     private func handleServerStatusResponse(_ response: ServerStatusResponse) {
-        serverStatuses = response.data
+        // 过滤掉已合并的服务器，避免重复显示
+        let filteredStatuses = response.data.filter { serverStatus in
+            !serverMappings.keys.contains(serverStatus.server)
+        }
+        serverStatuses = filteredStatuses
         lastUpdateTime = Date()
     }
     
