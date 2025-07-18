@@ -849,6 +849,11 @@ struct DashboardView: View {
             }
             .navigationTitle(dashboardTitle)
             .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    ServerStatusIndicator()
+                        .environmentObject(dungeonManager)
+                }
+                
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
                         showingQuickStart = true
