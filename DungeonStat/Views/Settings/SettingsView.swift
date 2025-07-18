@@ -16,6 +16,7 @@ struct SettingsView: View {
     @AppStorage("jx3api_token") private var jx3ApiToken = ""
     @AppStorage("jx3api_tokenv2") private var jx3ApiTokenV2 = ""
     @AppStorage("jx3api_ticket") private var jx3ApiTicket = ""
+    @AppStorage("showWelcomeBackRow") private var showWelcomeBackRow = true
     @State private var showingBackupManagement = false
     @State private var showingAPISettings = false
     @State private var showingAbout = false
@@ -75,6 +76,25 @@ struct SettingsView: View {
                                     Text("48小时").tag(48)
                                 }
                                 .pickerStyle(SegmentedPickerStyle())
+                            }
+                        }
+                    }
+                }
+                
+                // 界面设置区域
+                Section(header: Text("界面设置")) {
+                    Toggle(isOn: $showWelcomeBackRow) {
+                        HStack {
+                            Image(systemName: "person.wave.2")
+                                .foregroundColor(.blue)
+                                .frame(width: 24)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("显示欢迎回来")
+                                    .font(.headline)
+                                Text(showWelcomeBackRow ? "仪表盘显示欢迎回来区域" : "仪表盘标题显示问候语")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
                             }
                         }
                     }
@@ -745,16 +765,47 @@ struct StatisticsView: View {
 // MARK: - 仪表盘页面（Dashboard）
 struct DashboardView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
+    @AppStorage("showWelcomeBackRow") private var showWelcomeBackRow = true
     @State private var showingQuickStart = false
     @State private var showingCharacterSelector = false
     @State private var weeklyCdRefreshTrigger = 0
     
+    private var currentTimeGreeting: String {
+        let hour = Calendar.current.component(.hour, from: Date())
+        switch hour {
+        case 5..<12:
+            return "早上好"
+        case 12..<14:
+            return "中午好"
+        case 14..<18:
+            return "下午好"
+        case 18..<22:
+            return "晚上好"
+        default:
+            return "深夜好"
+        }
+    }
+    
+    private var dashboardTitle: String {
+        if showWelcomeBackRow {
+            return "仪表盘"
+        } else {
+            if let selectedCharacter = dungeonManager.selectedCharacter {
+                return "\(currentTimeGreeting)，\(selectedCharacter.name)"
+            } else {
+                return "仪表盘"
+            }
+        }
+    }
+    
     var body: some View {
         NavigationView {
             List {
-                // 欢迎回来区域
-                Section {
-                    WelcomeBackRow()
+                // 欢迎回来区域（根据设置显示）
+                if showWelcomeBackRow {
+                    Section {
+                        WelcomeBackRow()
+                    }
                 }
                 
                 // 周副本完成进度（圆形进度条）
@@ -796,7 +847,7 @@ struct DashboardView: View {
                     }
                 }
             }
-            .navigationTitle("仪表盘")
+            .navigationTitle(dashboardTitle)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
