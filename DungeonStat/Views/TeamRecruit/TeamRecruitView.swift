@@ -2,7 +2,7 @@
 //  TeamRecruitView.swift
 //  DungeonStat
 //
-//  Created by 黄天晨 on 2025/7/19.
+//  Created by PigeonMuyz on 2025/7/19.
 //
 
 import SwiftUI
@@ -10,19 +10,51 @@ import SwiftUI
 // MARK: - 团队招募主视图
 struct TeamRecruitView: View {
     @StateObject private var recruitService = TeamRecruitService.shared
+    @StateObject private var settings = TeamRecruitSettings.shared
     @State private var searchText = ""
     @EnvironmentObject var dungeonManager: DungeonManager
     
     // 过滤后的招募信息
     private var filteredRecruits: [TeamRecruitItem] {
-        if searchText.isEmpty {
-            return recruitService.recruitItems
-        } else {
-            return recruitService.recruitItems.filter { item in
-                item.activity.localizedCaseInsensitiveContains(searchText) ||
-                item.leader.localizedCaseInsensitiveContains(searchText) ||
-                item.content.localizedCaseInsensitiveContains(searchText)
+        var items = recruitService.recruitItems
+        
+        // 首先应用金团过滤
+        if settings.filterGoldTeams && !settings.showGoldTeamsInSearch {
+            items = items.filter { !$0.isGoldTeam }
+        }
+        
+        // 如果没有搜索文本，返回过滤后的全部结果
+        guard !searchText.isEmpty else {
+            return items
+        }
+        
+        // 应用搜索过滤
+        return items.filter { item in
+            // 基础搜索：活动名称、团长、内容
+            let basicMatch = item.activity.localizedCaseInsensitiveContains(searchText) ||
+                           item.leader.localizedCaseInsensitiveContains(searchText) ||
+                           item.content.localizedCaseInsensitiveContains(searchText)
+            
+            // 如果基础搜索匹配，直接返回
+            if basicMatch {
+                return true
             }
+            
+            // 补贴搜索
+            if settings.enableSubsidySearch && (searchText.lowercased().contains("补") || searchText.lowercased().contains("tn补")) {
+                if item.hasSubsidy {
+                    return true
+                }
+            }
+            
+            // 职业搜索
+            if settings.enableProfessionSearch {
+                if item.matchesProfession(searchText) {
+                    return true
+                }
+            }
+            
+            return false
         }
     }
     
@@ -123,26 +155,6 @@ struct TeamRecruitView: View {
     // MARK: - 团队招募内容视图
     private var recruitContentView: some View {
         VStack(spacing: 0) {
-            // 服务器信息和更新时间显示
-            if let serverInfo = recruitService.serverInfo {
-                HStack {
-                    Text("\(serverInfo.zone) - \(serverInfo.server)")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Spacer()
-                    
-                    if let lastUpdate = recruitService.lastUpdateTime {
-                        Text("更新时间: \(formatUpdateTime(lastUpdate))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                }
-                .padding(.horizontal, 16)
-                .padding(.vertical, 8)
-                .background(Color(UIColor.systemGroupedBackground))
-            }
-            
             // 团队列表
             List(filteredRecruits) { item in
                 TeamRecruitRow(item: item)
@@ -198,7 +210,7 @@ struct TeamRecruitRow: View {
                                 .fill(item.isFull ? Color.red.opacity(0.1) : Color.blue.opacity(0.1))
                         )
                     
-                    // 满员或缺人状态
+                    // 仅显示满员状态
                     if item.isFull {
                         Text("已满")
                             .font(.caption)
@@ -208,14 +220,29 @@ struct TeamRecruitRow: View {
                             .padding(.vertical, 2)
                             .background(Color.red)
                             .cornerRadius(6)
-                    } else {
-                        Text("缺\(item.neededMembers)人")
+                    }
+                    
+                    // 显示金团标识
+                    if item.isGoldTeam {
+                        Text("金团")
                             .font(.caption)
                             .fontWeight(.medium)
                             .foregroundColor(.white)
                             .padding(.horizontal, 6)
                             .padding(.vertical, 2)
-                            .background(Color.green)
+                            .background(Color.orange)
+                            .cornerRadius(6)
+                    }
+                    
+                    // 显示补贴标识
+                    if let subsidyInfo = item.subsidyInfo {
+                        Text(subsidyInfo)
+                            .font(.caption)
+                            .fontWeight(.medium)
+                            .foregroundColor(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.purple)
                             .cornerRadius(6)
                     }
                 }
@@ -227,7 +254,7 @@ struct TeamRecruitRow: View {
                     .foregroundColor(.secondary)
                     .font(.caption)
                 
-                Text("团长: \(item.leader)")
+                Text("\(item.leader)")
                     .font(.subheadline)
                     .foregroundColor(.secondary)
                 
@@ -249,30 +276,4 @@ struct TeamRecruitRow: View {
         .background(item.isFull ? Color.gray.opacity(0.05) : Color.clear)
     }
 }
-
-// MARK: - 预览
-#Preview {
-    TeamRecruitView()
-        .environmentObject(DungeonManager())
-}
-
-#Preview("Recruit Row") {
-    TeamRecruitRow(
-        item: TeamRecruitItem(
-            activity: "九老洞",
-            leader: "花开又一季",
-            number: 9,
-            maxNumber: 10,
-            content: "小1，T奶齐随便来++++++++++++++",
-            crossServer: true,
-            activityId: 5,
-            level: 120,
-            pushId: 0,
-            roomID: "525994",
-            roleId: 0,
-            createTime: 1713009284,
-            label: []
-        )
-    )
-    .padding()
-}
+    

@@ -2,7 +2,7 @@
 //  DropItem.swift
 //  DungeonStat
 //
-//  Created by 黄天晨 on 2025/7/4.
+//  Created by PigeonMuyz on 2025/7/4.
 //
 
 import SwiftUI

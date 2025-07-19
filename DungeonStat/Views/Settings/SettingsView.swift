@@ -2,7 +2,7 @@
 //  SettingsView.swift
 //  DungeonStat
 //
-//  Created by 黄天晨 on 2025/7/4.
+//  Created by PigeonMuyz on 2025/7/4.
 //
 
 import SwiftUI
@@ -93,6 +93,22 @@ struct SettingsView: View {
                                 Text("显示欢迎回来")
                                     .font(.headline)
                                 Text(showWelcomeBackRow ? "仪表盘显示欢迎回来区域" : "仪表盘标题显示问候语")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    
+                    NavigationLink(destination: TeamRecruitSettingsView()) {
+                        HStack {
+                            Image(systemName: "person.3.fill")
+                                .foregroundColor(.orange)
+                                .frame(width: 24)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("团队招募设置")
+                                    .font(.headline)
+                                Text("配置金团过滤、搜索和显示选项")
                                     .font(.caption)
                                     .foregroundColor(.secondary)
                             }
