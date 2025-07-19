@@ -6,6 +6,7 @@
 //
 
 import Foundation
+import SwiftUI
 
 // MARK: - 团队招募数据模型
 struct TeamRecruitResponse: Codable {
@@ -134,16 +135,38 @@ extension TeamRecruitItem {
         let content = self.content.lowercased()
         let activity = self.activity.lowercased()
         
-        // 检查内容关键字
-        let goldKeywords = ["0抵消", "来打手", "包团"]
+        // 扩展的金团关键字
+        let goldKeywords = [
+            "0抵消", "来打手", "包团", "老板", "需求老板", "来老板",
+            "躺拍", "包牌子武器", "包大小铁", "低消", "包铁", "金团",
+            "躺老板", "包牌子", "包武器", "抵消", "来装备需求"
+        ]
+        
         let hasGoldKeywords = goldKeywords.contains { keyword in
             content.contains(keyword) || content.contains(keyword.replacingOccurrences(of: "z", with: ""))
         }
         
-        // 检查是否为25人团且只有1人
-        let is25PersonTeam = activity.contains("25人") && maxNumber == 25 && number == 1
+        // 检查数字+z模式 (如"2z", "3z"等)
+        let digitZPattern = "\\d+z"
+        let hasDigitZ = content.range(of: digitZPattern, options: .regularExpression) != nil
         
-        return hasGoldKeywords || is25PersonTeam
+        // 只有当content满足金团条件且number为1时才判断为金团
+        return (hasGoldKeywords || hasDigitZ) && number == 1
+    }
+    
+    /// 是否为教学团
+    var isTeachingTeam: Bool {
+        let content = self.content.lowercased()
+        let activity = self.activity.lowercased()
+        return content.contains("教学") || content.contains("萌新") || 
+               activity.contains("教学") || content.contains("带新手")
+    }
+    
+    /// 是否为开荒团
+    var isPioneerTeam: Bool {
+        let content = self.content.lowercased()
+        let activity = self.activity.lowercased()
+        return content.contains("开荒") || activity.contains("开荒")
     }
     
     /// 是否有补贴
@@ -166,65 +189,77 @@ extension TeamRecruitItem {
         return nil
     }
     
-    /// 匹配职业关键字
-    func matchesProfession(_ searchText: String) -> Bool {
+    /// 简单的文本匹配（参考JSX实现）
+    func matchesSearchText(_ searchText: String) -> Bool {
         let content = self.content.lowercased()
         let activity = self.activity.lowercased()
+        let leader = self.leader.lowercased()
         let searchLower = searchText.lowercased()
         
-        // 定义完整的职业关键字映射
-        let professionKeywords: [String: [String]] = [
-            // 治疗职业
-            "歌奶": ["歌", "歌奶", "万花奶", "万花治疗", "花奶", "万花", "歌治疗"],
-            "药奶": ["药", "药奶", "药宗奶", "药宗治疗", "药治疗", "药宗"],
-            "秀奶": ["秀", "秀奶", "七秀奶", "七秀治疗", "秀治疗", "七秀"],
-            "毒奶": ["毒", "毒奶", "五毒奶", "五毒治疗", "毒治疗", "五毒"],
-            "花奶": ["花", "花奶", "万花奶", "万花治疗", "歌奶", "万花", "花治疗"],
-            "奶": ["奶", "治疗", "奶妈", "奶爸"],
-            
-            // 坦克职业
-            "t": ["t", "坦克", "mt", "副t", "主t"],
-            "铁牢": ["铁牢", "铁牢t", "少林t", "少林坦克"],
-            "明教": ["明教", "明教t", "明教坦克"],
-            "策天": ["策天", "策天t", "纯阳坦克"],
-            
-            // DPS职业
-            "dps": ["dps", "输出", "dd"],
-            "剑纯": ["剑纯", "纯阳剑", "太虚剑意"],
-            "气纯": ["气纯", "纯阳气", "紫霞功"],
-            "分山": ["分山", "分山劲", "苍云"],
-            "莫问": ["莫问", "莫问归期", "长歌"],
-            "霸刀": ["霸刀", "北傲决", "刀宗"],
-            "蓬莱": ["蓬莱", "凌海决"],
-            "衍天": ["衍天", "衍天宗", "五毒dps"],
-            "惊羽": ["惊羽", "惊羽诀", "鹿鸣"],
-            "天策": ["天策", "天策dps", "策"],
-            "藏剑": ["藏剑", "问水诀", "山居剑意"],
-            "毒经": ["毒经", "毒dps", "五毒输出"],
-            "笑尘": ["笑尘", "笑尘诀", "万花dps"],
-            "焚影": ["焚影", "焚影圣诀", "明教dps"],
-            "冰心": ["冰心", "冰心诀", "七秀dps"],
-            "云裳": ["云裳", "云裳心经", "秀dps"],
-            "太玄": ["太玄", "太玄经", "藏剑dps"],
-            "隐龙": ["隐龙", "隐龙诀", "苍云dps"],
-            "无方": ["无方", "无方寸", "长歌dps"],
-            
-            // 通用搜索
-            "tn": ["t", "n", "坦克", "奶妈", "治疗", "tn"],
-            "tn补": ["tn补", "t补", "n补", "坦克补", "奶补", "治疗补"],
-            "dps补": ["dps补", "dd补", "输出补"]
+        // 直接匹配搜索词，类似JSX的实现
+        return content.contains(searchLower) || 
+               leader.contains(searchLower) || 
+               activity.contains(searchLower)
+    }
+    
+    /// 提取职业标签（参照JSX的extractTags函数）
+    var extractedTags: [ProfessionTag] {
+        let content = self.content
+        var tags: [ProfessionTag] = []
+        
+        // 检测金团标签
+        if isGoldTeam {
+            tags.append(ProfessionTag(label: "金团", color: .orange))
+        }
+        
+        // 检测教学团标签  
+        if isTeachingTeam {
+            tags.append(ProfessionTag(label: "教学团", color: .blue))
+        }
+        
+        // 检测开荒团标签
+        if isPioneerTeam {
+            tags.append(ProfessionTag(label: "开荒团", color: .green))
+        }
+        
+        // 职业标签配置（参照JSX的professionTags）
+        let professionPatterns: [(label: String, color: Color, patterns: [String])] = [
+            ("奶歌", .cyan, ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"]),
+            ("奶毒", .purple, ["奶毒", "毒奶"]),
+            ("奶秀", .red, ["奶秀", "秀奶"]),
+            ("奶花", .green, ["奶花", "花奶"]),
+            ("奶药", .yellow, ["奶药", "药奶"]),
+            ("策T", .orange, ["策t", "天策t", "铁牢"]),
+            ("苍T", .gray, ["苍t", "王八t"]),
+            ("和尚T", .brown, ["和尚t", "秃t", "大师t"]),
+            ("喵T", .pink, ["喵t", "明教t"])
         ]
         
-        // 检查是否匹配职业关键字
-        for (profession, keywords) in professionKeywords {
-            if searchLower.contains(profession) {
-                return keywords.contains { keyword in
-                    content.contains(keyword) || activity.contains(keyword)
-                }
+        // 检测职业标签
+        for profession in professionPatterns {
+            // 检查是否匹配任一模式
+            let hasMatch = profession.patterns.contains { pattern in
+                // 使用正则表达式确保精确匹配，避免误匹配
+                let regex = "(^|[^\\u4e00-\\u9fa5])\(pattern)($|[^\\u4e00-\\u9fa5])"
+                return content.range(of: regex, options: .regularExpression) != nil ||
+                       content.contains("来\(pattern)") ||
+                       content.contains("求\(pattern)") ||
+                       content.contains("缺\(pattern)")
+            }
+            
+            if hasMatch {
+                tags.append(ProfessionTag(label: profession.label, color: profession.color))
             }
         }
         
-        // 直接匹配搜索词
-        return content.contains(searchLower) || activity.contains(searchLower)
+        // 去重
+        return Array(Set(tags))
     }
+}
+
+// MARK: - 职业标签模型
+struct ProfessionTag: Hashable, Identifiable {
+    let id = UUID()
+    let label: String
+    let color: Color
 }
