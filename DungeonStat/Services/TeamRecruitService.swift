@@ -99,9 +99,9 @@ class TeamRecruitService: ObservableObject {
     }
     
     private func getTokenV1() -> String? {
-        // 从UserDefaults或其他配置中获取token
-        // 这里需要根据你的实际token存储方式来实现
-        return UserDefaults.standard.string(forKey: "jx3_token_v1")
+        // 获取TokenV1，参考JX3APIService的实现
+        let token = UserDefaults.standard.string(forKey: "jx3api_token") ?? ""
+        return token.isEmpty ? nil : token
     }
     
     /// 根据活动名称对招募信息进行分组
