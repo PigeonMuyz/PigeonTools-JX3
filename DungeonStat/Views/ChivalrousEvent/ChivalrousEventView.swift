@@ -37,7 +37,7 @@ struct ChivalrousEventView: View {
                     }) {
                         Image(systemName: "arrow.clockwise")
                             .rotationEffect(.degrees(eventService.isLoading ? 360 : 0))
-                            .animation(.linear(duration: 1.0).repeatForever(autoreverses: false), value: eventService.isLoading)
+                            .animation(eventService.isLoading ? Animation.linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: eventService.isLoading)
                     }
                     .disabled(eventService.isLoading)
                 }

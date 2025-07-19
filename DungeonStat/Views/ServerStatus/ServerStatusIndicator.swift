@@ -161,7 +161,7 @@ struct ServerStatusDetailView: View {
                     }) {
                         Image(systemName: "arrow.clockwise")
                             .rotationEffect(.degrees(serverStatusManager.isLoading ? 360 : 0))
-                            .animation(.linear(duration: 1.0).repeatForever(autoreverses: false), value: serverStatusManager.isLoading)
+                            .animation(serverStatusManager.isLoading ? Animation.linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: serverStatusManager.isLoading)
                     }
                     .disabled(serverStatusManager.isLoading)
                 }
