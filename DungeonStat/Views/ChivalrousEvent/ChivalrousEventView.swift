@@ -12,8 +12,6 @@ struct ChivalrousEventView: View {
     @StateObject private var eventService = ChivalrousEventService.shared
     @State private var selectedOrganization: ChivalrousOrganization = .pifenghui
     @Environment(\.dismiss) private var dismiss
-    @State private var timer: Timer?
-    @State private var refreshTrigger = false
     
     var body: some View {
         NavigationView {
@@ -48,10 +46,6 @@ struct ChivalrousEventView: View {
                 if eventService.events.isEmpty {
                     eventService.fetchChivalrousEvents(for: selectedOrganization)
                 }
-                startTimer()
-            }
-            .onDisappear {
-                stopTimer()
             }
         }
     }
@@ -64,8 +58,6 @@ struct ChivalrousEventView: View {
                     Button(action: {
                         selectedOrganization = organization
                         eventService.fetchChivalrousEvents(for: organization)
-                        // 重新启动定时器以确保状态更新
-                        startTimer()
                     }) {
                         HStack(spacing: 8) {
                             Image(systemName: organization.iconName)
@@ -187,7 +179,7 @@ struct ChivalrousEventView: View {
             
             // 事件列表
             List(getSortedEvents()) { event in
-                ChivalrousEventRow(event: event, isInProgress: isEventInProgress(event))
+                ChivalrousEventRow(event: event, allEvents: eventService.events)
                     .listRowSeparator(.visible)
                     .listRowBackground(Color.clear)
             }
@@ -195,7 +187,6 @@ struct ChivalrousEventView: View {
             .refreshable {
                 eventService.refreshEvents(for: selectedOrganization)
             }
-            .id(refreshTrigger)
         }
         .background(Color(UIColor.systemBackground))
     }
@@ -268,20 +259,6 @@ struct ChivalrousEventView: View {
         return sortedTimes.first! + (24 * 3600) // 加一天的秒数
     }
     
-    // MARK: - 定时器管理
-    private func startTimer() {
-        stopTimer()
-        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
-            // 触发视图更新以重新计算事件进行状态
-            refreshTrigger.toggle()
-        }
-    }
-    
-    private func stopTimer() {
-        timer?.invalidate()
-        timer = nil
-    }
-    
     // MARK: - 辅助方法
     private func formatUpdateTime(_ date: Date) -> String {
         let formatter = DateFormatter()
@@ -293,7 +270,9 @@ struct ChivalrousEventView: View {
 // MARK: - 行侠事件行视图
 struct ChivalrousEventRow: View {
     let event: ChivalrousEvent
-    let isInProgress: Bool
+    let allEvents: [ChivalrousEvent]
+    @State private var isInProgress = false
+    @State private var timer: Timer?
     
     var body: some View {
         HStack(spacing: 12) {
@@ -364,6 +343,78 @@ struct ChivalrousEventRow: View {
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
         .background(isInProgress ? Color.green.opacity(0.05) : Color.clear)
+        .onAppear {
+            updateProgressStatus()
+            startTimer()
+        }
+        .onDisappear {
+            stopTimer()
+        }
+        .onChange(of: allEvents) { _, _ in
+            updateProgressStatus()
+        }
+    }
+    
+    // MARK: - 定时器和状态管理
+    private func startTimer() {
+        stopTimer()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            updateProgressStatus()
+        }
+    }
+    
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
+    
+    private func updateProgressStatus() {
+        let currentTimeInSeconds = getCurrentTimeInSeconds()
+        let eventTimeInSeconds = timeToSeconds(event.time)
+        let nextEventTimeInSeconds = getNextEventTime(after: eventTimeInSeconds)
+        
+        // 事件进行时间：从事件开始时间到下一个事件开始前1秒
+        let eventEndTimeInSeconds = nextEventTimeInSeconds - 1
+        
+        isInProgress = currentTimeInSeconds >= eventTimeInSeconds && currentTimeInSeconds <= eventEndTimeInSeconds
+    }
+    
+    private func getCurrentTimeInSeconds() -> Int {
+        let now = Date()
+        let calendar = Calendar.current
+        let hour = calendar.component(.hour, from: now)
+        let minute = calendar.component(.minute, from: now)
+        let second = calendar.component(.second, from: now)
+        return hour * 3600 + minute * 60 + second
+    }
+    
+    private func timeToSeconds(_ timeString: String) -> Int {
+        let components = timeString.split(separator: ":")
+        guard components.count == 2,
+              let hours = Int(components[0]),
+              let minutes = Int(components[1]) else {
+            return 0
+        }
+        return hours * 3600 + minutes * 60
+    }
+    
+    private func getNextEventTime(after eventTimeInSeconds: Int) -> Int {
+        let sortedTimes = allEvents.map { timeToSeconds($0.time) }.sorted()
+        
+        // 确保有事件数据
+        guard !sortedTimes.isEmpty else {
+            return 24 * 3600 // 默认返回第二天0点
+        }
+        
+        // 寻找当天的下一个事件
+        for time in sortedTimes {
+            if time > eventTimeInSeconds {
+                return time
+            }
+        }
+        
+        // 如果当天没有找到下一个事件，返回第二天的第一个事件时间
+        return sortedTimes.first! + (24 * 3600) // 加一天的秒数
     }
 }
 
@@ -382,7 +433,16 @@ struct ChivalrousEventRow: View {
             icon: "8",
             time: "05:04"
         ),
-        isInProgress: true
+        allEvents: [
+            ChivalrousEvent(
+                mapName: "百溪",
+                event: "保护庄稼",
+                site: "镇海阁东北",
+                desc: "公共任务：帮助村民除去农田里的害虫和杂草。",
+                icon: "8",
+                time: "05:04"
+            )
+        ]
     )
     .padding()
 }

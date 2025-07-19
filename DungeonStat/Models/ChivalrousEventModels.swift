@@ -15,7 +15,7 @@ struct ChivalrousEventResponse: Codable {
     let time: Int
 }
 
-struct ChivalrousEvent: Codable, Identifiable {
+struct ChivalrousEvent: Codable, Identifiable, Equatable {
     let id = UUID()
     let mapName: String
     let event: String
