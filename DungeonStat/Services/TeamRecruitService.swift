@@ -25,48 +25,36 @@ class TeamRecruitService: ObservableObject {
     // MARK: - 公共方法
     
     /// 获取团队招募信息
-    func fetchTeamRecruit(server: String, keyword: String = "", searchType: TeamRecruitSearchType = .all) {
+    func fetchTeamRecruit(server: String) {
         guard !isLoading else { return }
         
         isLoading = true
         errorMessage = nil
-        
-        // 构建请求参数
-        var parameters: [String: Any] = [
-            "server": server,
-            "table": searchType.rawValue
-        ]
-        
-        // 如果有关键词，添加到参数中
-        if !keyword.isEmpty {
-            parameters["keyword"] = keyword
-        }
         
         // 从配置中获取token
         guard let token = getTokenV1() else {
             handleError("未找到有效的API Token")
             return
         }
-        parameters["token"] = token
         
-        // 构建请求
-        guard let url = URL(string: "https://www.jx3api.com/data/member/recruit") else {
+        // 构建GET请求URL，table固定为1（全部查询）
+        guard var urlComponents = URLComponents(string: "https://www.jx3api.com/data/member/recruit") else {
             handleError("无效的API地址")
             return
         }
         
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        urlComponents.queryItems = [
+            URLQueryItem(name: "server", value: server),
+            URLQueryItem(name: "table", value: "1"),
+            URLQueryItem(name: "token", value: token)
+        ]
         
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: parameters)
-        } catch {
-            handleError("请求参数编码失败")
+        guard let url = urlComponents.url else {
+            handleError("无法构建请求URL")
             return
         }
         
-        URLSession.shared.dataTaskPublisher(for: request)
+        URLSession.shared.dataTaskPublisher(for: url)
             .map(\.data)
             .decode(type: TeamRecruitResponse.self, decoder: JSONDecoder())
             .receive(on: DispatchQueue.main)
@@ -85,8 +73,8 @@ class TeamRecruitService: ObservableObject {
     }
     
     /// 手动刷新团队招募信息
-    func refreshTeamRecruit(server: String, keyword: String = "", searchType: TeamRecruitSearchType = .all) {
-        fetchTeamRecruit(server: server, keyword: keyword, searchType: searchType)
+    func refreshTeamRecruit(server: String) {
+        fetchTeamRecruit(server: server)
     }
     
     // MARK: - 私有方法

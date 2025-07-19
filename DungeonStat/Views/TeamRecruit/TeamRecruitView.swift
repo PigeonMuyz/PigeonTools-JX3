@@ -10,130 +10,23 @@ import SwiftUI
 // MARK: - 团队招募主视图
 struct TeamRecruitView: View {
     @StateObject private var recruitService = TeamRecruitService.shared
-    @State private var selectedServer = ""
-    @State private var searchKeyword = ""
-    @State private var selectedSearchType: TeamRecruitSearchType = .all
-    @Environment(\.dismiss) private var dismiss
+    @State private var searchText = ""
     @EnvironmentObject var dungeonManager: DungeonManager
     
+    // 过滤后的招募信息
+    private var filteredRecruits: [TeamRecruitItem] {
+        if searchText.isEmpty {
+            return recruitService.recruitItems
+        } else {
+            return recruitService.recruitItems.filter { item in
+                item.activity.localizedCaseInsensitiveContains(searchText) ||
+                item.leader.localizedCaseInsensitiveContains(searchText) ||
+                item.content.localizedCaseInsensitiveContains(searchText)
+            }
+        }
+    }
+    
     var body: some View {
-        NavigationView {
-            VStack(spacing: 0) {
-                // 服务器和搜索配置
-                searchConfigSection
-                
-                // 搜索类型选择器
-                searchTypeSelector
-                
-                // 团队招募列表
-                recruitList
-            }
-            .navigationTitle("团队招募")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("关闭") {
-                        dismiss()
-                    }
-                }
-                
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(action: {
-                        refreshRecruits()
-                    }) {
-                        Image(systemName: "arrow.clockwise")
-                            .rotationEffect(.degrees(recruitService.isLoading ? 360 : 0))
-                            .animation(recruitService.isLoading ? Animation.linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: recruitService.isLoading)
-                    }
-                    .disabled(recruitService.isLoading || selectedServer.isEmpty)
-                }
-            }
-            .onAppear {
-                // 如果有选中的角色，默认使用其服务器
-                if let selectedCharacter = dungeonManager.selectedCharacter {
-                    selectedServer = selectedCharacter.server
-                    refreshRecruits()
-                }
-            }
-        }
-    }
-    
-    // MARK: - 搜索配置区域
-    private var searchConfigSection: some View {
-        VStack(spacing: 12) {
-            // 服务器选择
-            HStack {
-                Text("服务器:")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                TextField("请输入服务器名称", text: $selectedServer)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .onSubmit {
-                        refreshRecruits()
-                    }
-            }
-            
-            // 关键词搜索
-            HStack {
-                Text("关键词:")
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                
-                TextField("搜索活动或内容（可选）", text: $searchKeyword)
-                    .textFieldStyle(RoundedBorderTextFieldStyle())
-                    .onSubmit {
-                        refreshRecruits()
-                    }
-                
-                Button("搜索") {
-                    refreshRecruits()
-                }
-                .buttonStyle(.borderedProminent)
-                .disabled(selectedServer.isEmpty || recruitService.isLoading)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(UIColor.systemGroupedBackground))
-    }
-    
-    // MARK: - 搜索类型选择器
-    private var searchTypeSelector: some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 16) {
-                ForEach(TeamRecruitSearchType.allCases, id: \.self) { searchType in
-                    Button(action: {
-                        selectedSearchType = searchType
-                        refreshRecruits()
-                    }) {
-                        HStack(spacing: 8) {
-                            Image(systemName: searchType.iconName)
-                                .font(.system(size: 16))
-                            
-                            Text(searchType.displayName)
-                                .font(.system(size: 16, weight: .medium))
-                        }
-                        .foregroundColor(selectedSearchType == searchType ? .white : .primary)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
-                        .background(
-                            RoundedRectangle(cornerRadius: 20)
-                                .fill(selectedSearchType == searchType ? 
-                                     Color.accentColor : Color.gray.opacity(0.1))
-                        )
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                }
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-        }
-        .background(Color(UIColor.systemBackground))
-    }
-    
-    // MARK: - 团队招募列表
-    private var recruitList: some View {
         Group {
             if recruitService.isLoading {
                 loadingView
@@ -145,7 +38,29 @@ struct TeamRecruitView: View {
                 recruitContentView
             }
         }
+        .navigationTitle("团队招募")
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(action: {
+                    refreshRecruits()
+                }) {
+                    Image(systemName: "arrow.clockwise")
+                        .rotationEffect(.degrees(recruitService.isLoading ? 360 : 0))
+                        .animation(recruitService.isLoading ? Animation.linear(duration: 1.0).repeatForever(autoreverses: false) : .default, value: recruitService.isLoading)
+                }
+                .disabled(recruitService.isLoading || dungeonManager.selectedCharacter == nil)
+            }
+        }
+        .searchable(text: $searchText, prompt: "搜索活动、团长或内容")
+        .onAppear {
+            // 如果有选中的角色，默认使用其服务器
+            if dungeonManager.selectedCharacter != nil {
+                refreshRecruits()
+            }
+        }
     }
+    
     
     // MARK: - 加载视图
     private var loadingView: some View {
@@ -181,7 +96,7 @@ struct TeamRecruitView: View {
                 refreshRecruits()
             }
             .buttonStyle(.borderedProminent)
-            .disabled(selectedServer.isEmpty)
+            .disabled(dungeonManager.selectedCharacter == nil)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Color(UIColor.systemGroupedBackground))
@@ -229,7 +144,7 @@ struct TeamRecruitView: View {
             }
             
             // 团队列表
-            List(recruitService.recruitItems) { item in
+            List(filteredRecruits) { item in
                 TeamRecruitRow(item: item)
                     .listRowSeparator(.visible)
                     .listRowBackground(Color.clear)
@@ -244,12 +159,8 @@ struct TeamRecruitView: View {
     
     // MARK: - 辅助方法
     private func refreshRecruits() {
-        guard !selectedServer.isEmpty else { return }
-        recruitService.fetchTeamRecruit(
-            server: selectedServer,
-            keyword: searchKeyword,
-            searchType: selectedSearchType
-        )
+        guard let selectedCharacter = dungeonManager.selectedCharacter else { return }
+        recruitService.fetchTeamRecruit(server: selectedCharacter.server)
     }
     
     private func formatUpdateTime(_ date: Date) -> String {

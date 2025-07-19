@@ -22,7 +22,6 @@ struct ToolsView: View {
     @State private var characterDetailData: CharacterDetailData?
     @State private var isLoadingDetail = false
     @State private var showingChivalrousEvents = false
-    @State private var showingTeamRecruit = false
     
     var body: some View {
         NavigationView {
@@ -63,10 +62,6 @@ struct ToolsView: View {
             }
             .sheet(isPresented: $showingChivalrousEvents) {
                 ChivalrousEventView()
-            }
-            .sheet(isPresented: $showingTeamRecruit) {
-                TeamRecruitView()
-                    .environmentObject(dungeonManager)
             }
             .onChange(of: selectedCharacterForCard) { _, newValue in
                 if newValue != nil {
@@ -299,9 +294,7 @@ struct ToolsView: View {
             }
             .buttonStyle(PlainButtonStyle())
             
-            Button(action: {
-                showingTeamRecruit = true
-            }) {
+            NavigationLink(destination: TeamRecruitView().environmentObject(dungeonManager)) {
                 HStack {
                     Image(systemName: "person.3.fill")
                         .foregroundColor(.orange)
@@ -310,21 +303,14 @@ struct ToolsView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text("团队招募")
                             .font(.headline)
-                            .foregroundColor(.primary)
                         Text("查询服务器团队招募信息")
                             .font(.caption)
                             .foregroundColor(.secondary)
                     }
                     
                     Spacer()
-                    
-                    Image(systemName: "chevron.right")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
                 }
-                .contentShape(Rectangle())
             }
-            .buttonStyle(PlainButtonStyle())
         }
     }
     
