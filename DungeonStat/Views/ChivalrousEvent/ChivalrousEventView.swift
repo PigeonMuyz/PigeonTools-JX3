@@ -158,41 +158,85 @@ struct ChivalrousEventView: View {
     
     // MARK: - 事件内容视图
     private var eventsContentView: some View {
-        List {
+        VStack(spacing: 0) {
             // 更新时间显示
             if let lastUpdate = eventService.lastUpdateTime {
-                Section {
-                    HStack {
-                        Image(systemName: "clock")
-                            .foregroundColor(.secondary)
-                        
-                        Text("更新时间: \(formatUpdateTime(lastUpdate))")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                        
-                        Spacer()
-                    }
-                    .padding(.vertical, 4)
+                HStack {
+                    Image(systemName: "clock")
+                        .foregroundColor(.secondary)
+                        .font(.caption)
+                    
+                    Text("更新时间: \(formatUpdateTime(lastUpdate))")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
                 }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 8)
+                .background(Color(UIColor.systemGroupedBackground))
             }
             
-            // 按地图分组显示事件
-            let groupedEvents = eventService.groupEventsByMap()
-            ForEach(eventService.getAllMapNames(), id: \.self) { mapName in
-                Section(header: Text(mapName).font(.headline)) {
-                    if let events = groupedEvents[mapName] {
-                        ForEach(events) { event in
-                            ChivalrousEventRow(event: event)
-                        }
-                    }
-                }
+            // 事件列表
+            List(getSortedEvents()) { event in
+                ChivalrousEventRow(event: event, isInProgress: isEventInProgress(event))
+                    .listRowSeparator(.visible)
+                    .listRowBackground(Color.clear)
+            }
+            .listStyle(PlainListStyle())
+            .refreshable {
+                eventService.refreshEvents(for: selectedOrganization)
             }
         }
-        .listStyle(GroupedListStyle())
-        .background(Color(UIColor.systemGroupedBackground))
-        .refreshable {
-            eventService.refreshEvents(for: selectedOrganization)
+        .background(Color(UIColor.systemBackground))
+    }
+    
+    // MARK: - 辅助方法
+    private func getSortedEvents() -> [ChivalrousEvent] {
+        eventService.events.sorted { event1, event2 in
+            let time1 = timeToMinutes(event1.time)
+            let time2 = timeToMinutes(event2.time)
+            return time1 < time2
         }
+    }
+    
+    private func timeToMinutes(_ timeString: String) -> Int {
+        let components = timeString.split(separator: ":")
+        guard components.count == 2,
+              let hours = Int(components[0]),
+              let minutes = Int(components[1]) else {
+            return 0
+        }
+        return hours * 60 + minutes
+    }
+    
+    private func isEventInProgress(_ event: ChivalrousEvent) -> Bool {
+        let currentTime = getCurrentTimeInMinutes()
+        let eventTime = timeToMinutes(event.time)
+        let nextEventTime = getNextEventTime(after: eventTime)
+        
+        return currentTime >= eventTime && currentTime < (nextEventTime - 1)
+    }
+    
+    private func getCurrentTimeInMinutes() -> Int {
+        let now = Date()
+        let calendar = Calendar.current
+        let hour = calendar.component(.hour, from: now)
+        let minute = calendar.component(.minute, from: now)
+        return hour * 60 + minute
+    }
+    
+    private func getNextEventTime(after eventTime: Int) -> Int {
+        let sortedTimes = eventService.events.map { timeToMinutes($0.time) }.sorted()
+        
+        for time in sortedTimes {
+            if time > eventTime {
+                return time
+            }
+        }
+        
+        // 如果没有找到下一个事件，返回第二天的第一个事件
+        return sortedTimes.first ?? (24 * 60)
     }
     
     // MARK: - 辅助方法
@@ -206,46 +250,77 @@ struct ChivalrousEventView: View {
 // MARK: - 行侠事件行视图
 struct ChivalrousEventRow: View {
     let event: ChivalrousEvent
+    let isInProgress: Bool
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 事件标题和时间
-            HStack {
+        HStack(spacing: 12) {
+            // 左侧时间显示
+            VStack(alignment: .center, spacing: 2) {
+                Text(event.time)
+                    .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                    .foregroundColor(isInProgress ? .green : .primary)
+                
+                if isInProgress {
+                    Text("进行中")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 1)
+                        .background(Color.green)
+                        .cornerRadius(6)
+                }
+            }
+            .frame(width: 60)
+            
+            // 中间事件信息
+            VStack(alignment: .leading, spacing: 4) {
+                // 事件名称
                 Text(event.event)
                     .font(.headline)
                     .foregroundColor(.primary)
+                    .lineLimit(1)
                 
-                Spacer()
-                
+                // 地图和地点
                 HStack(spacing: 4) {
-                    Image(systemName: "clock")
-                        .font(.caption)
+                    Text(event.mapName)
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
                     
-                    Text(event.time)
-                        .font(.caption)
+                    Text("·")
+                        .font(.subheadline)
                         .foregroundColor(.secondary)
+                    
+                    Text(event.site)
+                        .font(.subheadline)
+                        .foregroundColor(.blue)
+                        .lineLimit(1)
                 }
-            }
-            
-            // 地点信息
-            HStack {
-                Image(systemName: "location")
-                    .font(.caption)
-                    .foregroundColor(.blue)
                 
-                Text(event.site)
-                    .font(.subheadline)
-                    .foregroundColor(.blue)
+                // 事件描述
+                Text(event.desc)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             
-            // 事件描述
-            Text(event.desc)
-                .font(.body)
-                .foregroundColor(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
+            Spacer()
+            
+            // 右侧状态指示
+            if isInProgress {
+                Image(systemName: "play.circle.fill")
+                    .font(.title2)
+                    .foregroundColor(.green)
+            } else {
+                Image(systemName: "circle")
+                    .font(.title3)
+                    .foregroundColor(.gray.opacity(0.3))
+            }
         }
-        .padding(.vertical, 8)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(isInProgress ? Color.green.opacity(0.05) : Color.clear)
     }
 }
 
@@ -255,13 +330,16 @@ struct ChivalrousEventRow: View {
 }
 
 #Preview("Event Row") {
-    ChivalrousEventRow(event: ChivalrousEvent(
-        mapName: "百溪",
-        event: "保护庄稼",
-        site: "镇海阁东北",
-        desc: "公共任务：帮助村民除去农田里的害虫和杂草。",
-        icon: "8",
-        time: "05:04"
-    ))
+    ChivalrousEventRow(
+        event: ChivalrousEvent(
+            mapName: "百溪",
+            event: "保护庄稼",
+            site: "镇海阁东北",
+            desc: "公共任务：帮助村民除去农田里的害虫和杂草。",
+            icon: "8",
+            time: "05:04"
+        ),
+        isInProgress: true
+    )
     .padding()
 }
