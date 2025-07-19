@@ -12,6 +12,8 @@ struct ChivalrousEventView: View {
     @StateObject private var eventService = ChivalrousEventService.shared
     @State private var selectedOrganization: ChivalrousOrganization = .pifenghui
     @Environment(\.dismiss) private var dismiss
+    @State private var timer: Timer?
+    @State private var refreshTrigger = false
     
     var body: some View {
         NavigationView {
@@ -46,6 +48,10 @@ struct ChivalrousEventView: View {
                 if eventService.events.isEmpty {
                     eventService.fetchChivalrousEvents(for: selectedOrganization)
                 }
+                startTimer()
+            }
+            .onDisappear {
+                stopTimer()
             }
         }
     }
@@ -58,6 +64,8 @@ struct ChivalrousEventView: View {
                     Button(action: {
                         selectedOrganization = organization
                         eventService.fetchChivalrousEvents(for: organization)
+                        // 重新启动定时器以确保状态更新
+                        startTimer()
                     }) {
                         HStack(spacing: 8) {
                             Image(systemName: organization.iconName)
@@ -187,6 +195,7 @@ struct ChivalrousEventView: View {
             .refreshable {
                 eventService.refreshEvents(for: selectedOrganization)
             }
+            .id(refreshTrigger)
         }
         .background(Color(UIColor.systemBackground))
     }
@@ -194,8 +203,8 @@ struct ChivalrousEventView: View {
     // MARK: - 辅助方法
     private func getSortedEvents() -> [ChivalrousEvent] {
         eventService.events.sorted { event1, event2 in
-            let time1 = timeToMinutes(event1.time)
-            let time2 = timeToMinutes(event2.time)
+            let time1 = timeToSeconds(event1.time)
+            let time2 = timeToSeconds(event2.time)
             return time1 < time2
         }
     }
@@ -211,32 +220,66 @@ struct ChivalrousEventView: View {
     }
     
     private func isEventInProgress(_ event: ChivalrousEvent) -> Bool {
-        let currentTime = getCurrentTimeInMinutes()
-        let eventTime = timeToMinutes(event.time)
-        let nextEventTime = getNextEventTime(after: eventTime)
+        let currentTimeInSeconds = getCurrentTimeInSeconds()
+        let eventTimeInSeconds = timeToSeconds(event.time)
+        let nextEventTimeInSeconds = getNextEventTime(after: eventTimeInSeconds)
         
-        return currentTime >= eventTime && currentTime < (nextEventTime - 1)
+        // 事件进行时间：从事件开始时间到下一个事件开始前1秒
+        let eventEndTimeInSeconds = nextEventTimeInSeconds - 1
+        
+        return currentTimeInSeconds >= eventTimeInSeconds && currentTimeInSeconds <= eventEndTimeInSeconds
     }
     
-    private func getCurrentTimeInMinutes() -> Int {
+    private func getCurrentTimeInSeconds() -> Int {
         let now = Date()
         let calendar = Calendar.current
         let hour = calendar.component(.hour, from: now)
         let minute = calendar.component(.minute, from: now)
-        return hour * 60 + minute
+        let second = calendar.component(.second, from: now)
+        return hour * 3600 + minute * 60 + second
     }
     
-    private func getNextEventTime(after eventTime: Int) -> Int {
-        let sortedTimes = eventService.events.map { timeToMinutes($0.time) }.sorted()
+    private func timeToSeconds(_ timeString: String) -> Int {
+        let components = timeString.split(separator: ":")
+        guard components.count == 2,
+              let hours = Int(components[0]),
+              let minutes = Int(components[1]) else {
+            return 0
+        }
+        return hours * 3600 + minutes * 60
+    }
+    
+    private func getNextEventTime(after eventTimeInSeconds: Int) -> Int {
+        let sortedTimes = eventService.events.map { timeToSeconds($0.time) }.sorted()
         
+        // 确保有事件数据
+        guard !sortedTimes.isEmpty else {
+            return 24 * 3600 // 默认返回第二天0点
+        }
+        
+        // 寻找当天的下一个事件
         for time in sortedTimes {
-            if time > eventTime {
+            if time > eventTimeInSeconds {
                 return time
             }
         }
         
-        // 如果没有找到下一个事件，返回第二天的第一个事件
-        return sortedTimes.first ?? (24 * 60)
+        // 如果当天没有找到下一个事件，返回第二天的第一个事件时间
+        return sortedTimes.first! + (24 * 3600) // 加一天的秒数
+    }
+    
+    // MARK: - 定时器管理
+    private func startTimer() {
+        stopTimer()
+        timer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { _ in
+            // 触发视图更新以重新计算事件进行状态
+            refreshTrigger.toggle()
+        }
+    }
+    
+    private func stopTimer() {
+        timer?.invalidate()
+        timer = nil
     }
     
     // MARK: - 辅助方法
