@@ -267,6 +267,24 @@ struct ToolsView: View {
     
     private var gameInfoSection: some View {
         Section(header: Text("游戏信息")) {
+            NavigationLink(destination: DungeonAchievementQueryView()) {
+                HStack {
+                    Image(systemName: "trophy.circle")
+                        .foregroundColor(.blue)
+                        .frame(width: 24)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("副本资历查询")
+                            .font(.headline)
+                        Text("查询任意角色的副本资历进度")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Spacer()
+                }
+            }
+            
             Button(action: {
                 showingChivalrousEvents = true
             }) {

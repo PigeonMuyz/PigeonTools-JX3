@@ -660,6 +660,31 @@ struct AchievementAnalyzerView: View {
         }
         
         self.dungeonAchievements = achievements
+        
+        // 保存查询缓存
+        saveQueryCache(achievements: achievements)
+    }
+    
+    private func saveQueryCache(achievements: [DungeonAchievementData]) {
+        // 转换数据格式用于缓存
+        let dungeonSummaries = achievements.map { achievement in
+            DungeonAchievementSummary(
+                dungeonName: achievement.dungeonName,
+                difficulty: achievement.difficulty,
+                completionRate: achievement.completionRate,
+                totalAchievements: achievement.achievements.count,
+                completedAchievements: Int(achievement.completionRate / 100.0 * Double(achievement.achievements.count)),
+                potential: achievement.potential,
+                priority: achievement.priority.rawValue
+            )
+        }
+        
+        // 保存到缓存服务
+        AchievementQueryCacheService.shared.saveQueryResult(
+            server: character.server,
+            roleName: character.name,
+            dungeonData: dungeonSummaries
+        )
     }
     
     private func formatDate(_ date: Date) -> String {
