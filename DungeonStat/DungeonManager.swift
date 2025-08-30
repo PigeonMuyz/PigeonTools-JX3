@@ -36,6 +36,7 @@ class DungeonManager: ObservableObject {
         
         loadData()
         initializeCategorySystem()
+        loadCollapsedCategories()  // 加载保存的展开状态
         
         // 添加调试输出
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {

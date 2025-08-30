@@ -176,11 +176,25 @@ extension DungeonManager {
             } else {
                 collapsedCategories.insert(categoryId)
             }
+            saveCollapsedCategories()
         }
     }
     
     func isCategoryCollapsed(_ categoryId: UUID) -> Bool {
         return collapsedCategories.contains(categoryId)
+    }
+    
+    // 保存折叠状态到UserDefaults
+    func saveCollapsedCategories() {
+        let categoryIds = Array(collapsedCategories).map { $0.uuidString }
+        UserDefaults.standard.set(categoryIds, forKey: "CollapsedCategories")
+    }
+    
+    // 加载折叠状态
+    func loadCollapsedCategories() {
+        if let categoryIds = UserDefaults.standard.stringArray(forKey: "CollapsedCategories") {
+            collapsedCategories = Set(categoryIds.compactMap { UUID(uuidString: $0) })
+        }
     }
     
     // MARK: - 强制重新分类所有副本

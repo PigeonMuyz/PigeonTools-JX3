@@ -22,9 +22,6 @@ struct DungeonListView: View {
                         if !isCategoryCollapsed(categoryGroup.category) {
                             ForEach(Array(categoryGroup.dungeons.enumerated()), id: \.element.id) { index, dungeon in
                                 DungeonRowView(dungeon: dungeon, index: dungeonManager.dungeons.firstIndex(where: { $0.id == dungeon.id }) ?? index)
-                                    .contextMenu {
-                                        CategoryContextMenu(dungeon: dungeon)
-                                    }
                             }
                         }
                     }
