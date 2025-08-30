@@ -817,48 +817,14 @@ struct DashboardView: View {
     var body: some View {
         NavigationView {
             List {
-                // 欢迎回来区域（根据设置显示）
-                if showWelcomeBackRow {
-                    Section {
-                        WelcomeBackRow()
-                    }
-                }
-                
-                // 周副本完成进度（圆形进度条）
-                Section {
-                    WeeklyProgressRow()
-                }
-                
-                // 本周副本状态
-                Section(header: HStack {
-                    Text("本周副本状态")
-                    Spacer()
-                    if dungeonManager.selectedCharacter != nil {
-                        Button(action: {
-                            weeklyCdRefreshTrigger += 1
-                        }) {
-                            Image(systemName: "arrow.clockwise")
-                                .foregroundColor(.blue)
-                                .font(.caption)
-                        }
-                    }
-                }) {
-                    WeeklyCdStatusCard(refreshTrigger: weeklyCdRefreshTrigger)
-                }
-                
-                // 全局数据统计
-                Section {
-                    GlobalStatsRows()
-                }
-                
                 // 全局进行中任务
-                Section {
+                Section(header: Text("进行中的任务")) {
                     AllInProgressTasksRows()
                 }
                 
                 // 角色分组显示
                 if !dungeonManager.characters.isEmpty {
-                    Section {
+                    Section(header: Text("角色详情")) {
                         CharacterBreakdownRows()
                     }
                 }
@@ -1478,78 +1444,116 @@ struct AllInProgressTasksRows: View {
 // MARK: - 角色分组行
 struct CharacterBreakdownRows: View {
     @EnvironmentObject var dungeonManager: DungeonManager
-    @State private var isExpanded = false
+    @State private var expandedCharacters: Set<UUID> = []
     
     var body: some View {
         Group {
-            // 展开/收起按钮
-            Button(action: {
-                withAnimation(.easeInOut(duration: 0.3)) {
-                    isExpanded.toggle()
-                }
-            }) {
-                HStack {
-                    Image(systemName: "person.3.fill")
-                        .font(.title3)
-                        .foregroundColor(.blue)
-                    
-                    Text("角色详情")
-                        .font(.subheadline)
-                        .foregroundColor(.primary)
-                    
-                    Spacer()
-                    
-                    Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                        .font(.caption)
-                        .foregroundColor(.blue)
-                }
-            }
-            .buttonStyle(PlainButtonStyle())
-            
             // 角色列表
-            if isExpanded {
-                ForEach(dungeonManager.characters) { character in
-                    HStack(spacing: 12) {
-                        Image(systemName: "person.circle.fill")
-                            .font(.title3)
-                            .foregroundColor(.blue)
-                        
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(character.name)
-                                .font(.subheadline)
-                                .fontWeight(.medium)
-                                .foregroundColor(.primary)
+            ForEach(dungeonManager.characters) { character in
+                VStack(spacing: 0) {
+                    Button(action: {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            if expandedCharacters.contains(character.id) {
+                                expandedCharacters.remove(character.id)
+                            } else {
+                                expandedCharacters.insert(character.id)
+                            }
+                        }
+                    }) {
+                        HStack(spacing: 12) {
+                            Image(systemName: "person.circle.fill")
+                                .font(.title3)
+                                .foregroundColor(.blue)
                             
-                            Text("\(character.server) · \(character.school)")
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(character.name)
+                                    .font(.subheadline)
+                                    .fontWeight(.medium)
+                                    .foregroundColor(.primary)
+                                
+                                Text("\(character.server) · \(character.school)")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            Spacer()
+                            
+                            HStack(spacing: 16) {
+                                VStack(alignment: .center, spacing: 2) {
+                                    Text("\(inProgressCount(for: character))")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.orange)
+                                    Text("进行中")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                VStack(alignment: .center, spacing: 2) {
+                                    Text("\(weeklyCount(for: character))")
+                                        .font(.caption)
+                                        .fontWeight(.bold)
+                                        .foregroundColor(.blue)
+                                    Text("本周")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Image(systemName: expandedCharacters.contains(character.id) ? "chevron.up" : "chevron.down")
                                 .font(.caption)
-                                .foregroundColor(.secondary)
+                                .foregroundColor(.gray)
                         }
-                        
-                        Spacer()
-                        
-                        HStack(spacing: 16) {
-                            VStack(alignment: .center, spacing: 2) {
-                                Text("\(inProgressCount(for: character))")
-                                    .font(.caption)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.orange)
-                                Text("进行中")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                            
-                            VStack(alignment: .center, spacing: 2) {
-                                Text("\(weeklyCount(for: character))")
-                                    .font(.caption)
-                                    .fontWeight(.bold)
-                                    .foregroundColor(.blue)
-                                Text("本周")
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
-                            }
-                        }
+                        .padding(.vertical, 8)
                     }
-                    .padding(.vertical, 2)
+                    .buttonStyle(PlainButtonStyle())
+                    
+                    // 展开的详细信息
+                    if expandedCharacters.contains(character.id) {
+                        VStack(alignment: .leading, spacing: 8) {
+                            Divider()
+                                .padding(.horizontal)
+                            
+                            // 角色详细统计
+                            VStack(alignment: .leading, spacing: 8) {
+                                HStack {
+                                    Text("本周完成副本")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(weeklyCount(for: character)) 次")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.blue)
+                                }
+                                
+                                HStack {
+                                    Text("总完成副本")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(totalCount(for: character)) 次")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.green)
+                                }
+                                
+                                HStack {
+                                    Text("进行中副本")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Text("\(inProgressCount(for: character)) 个")
+                                        .font(.caption)
+                                        .fontWeight(.medium)
+                                        .foregroundColor(.orange)
+                                }
+                            }
+                            .padding(.horizontal)
+                            .padding(.bottom, 8)
+                        }
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                    }
                 }
             }
         }
@@ -1571,6 +1575,14 @@ struct CharacterBreakdownRows: View {
         return dungeonManager.completionRecords.filter { record in
             record.completedDate >= currentGameWeekStart && 
             record.completedDate <= gameWeekEndFinal &&
+            record.character.server == character.server &&
+            record.character.name == character.name &&
+            record.character.school == character.school
+        }.count
+    }
+    
+    private func totalCount(for character: GameCharacter) -> Int {
+        dungeonManager.completionRecords.filter { record in
             record.character.server == character.server &&
             record.character.name == character.name &&
             record.character.school == character.school
