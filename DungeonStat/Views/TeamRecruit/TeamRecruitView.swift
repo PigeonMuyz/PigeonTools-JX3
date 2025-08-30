@@ -328,51 +328,51 @@ struct TeamRecruitRow: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             // 顶部：活动名称和人数状态
             HStack {
                 Text(item.activity)
-                    .font(.headline)
+                    .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.primary)
                     .lineLimit(1)
                 
                 Spacer()
                 
-                HStack(spacing: 8) {
+                HStack(spacing: 6) {
                     // 已满标签（放在人数左侧）
                     if item.isFull {
                         Text("已满")
-                            .font(.caption)
+                            .font(.system(size: 11))
                             .fontWeight(.medium)
                             .foregroundColor(.white)
-                            .padding(.horizontal, 6)
+                            .padding(.horizontal, 5)
                             .padding(.vertical, 2)
                             .background(Color.red)
-                            .cornerRadius(6)
+                            .cornerRadius(4)
                     }
                     
                     // 人数状态
                     Text(item.memberStatus)
-                        .font(.subheadline)
+                        .font(.system(size: 13))
                         .fontWeight(.medium)
                         .foregroundColor(memberStatusColor)
-                        .padding(.horizontal, 8)
+                        .padding(.horizontal, 6)
                         .padding(.vertical, 2)
                         .background(
-                            RoundedRectangle(cornerRadius: 8)
+                            RoundedRectangle(cornerRadius: 6)
                                 .fill(memberStatusBackground)
                         )
                 }
             }
             
             // 中部：团长信息
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 Image(systemName: "person.crop.circle")
                     .foregroundColor(.secondary)
-                    .font(.caption)
+                    .font(.system(size: 11))
                 
                 Text(item.leader)
-                    .font(.subheadline)
+                    .font(.system(size: 13))
                     .foregroundColor(.secondary)
                 
                 Spacer()
@@ -381,25 +381,25 @@ struct TeamRecruitRow: View {
             // 招募内容
             if !item.content.isEmpty {
                 Text(item.content)
-                    .font(.body)
+                    .font(.system(size: 14))
                     .foregroundColor(.primary)
-                    .lineLimit(nil)
+                    .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
-                    .padding(.top, 4)
+                    .padding(.top, 2)
             }
             
             // 职业标签（统一放在下方）
             if !tags.isEmpty {
-                LazyVGrid(columns: tagGridColumns, alignment: .leading, spacing: 4) {
+                LazyVGrid(columns: tagGridColumns, alignment: .leading, spacing: 3) {
                     ForEach(tags) { tag in
                         TagView(tag: tag)
                     }
                 }
-                .padding(.top, 8)
+                .padding(.top, 4)
             }
         }
-        .padding(.vertical, 12)
-        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
     }
     
     // 缓存网格列配置
@@ -412,12 +412,12 @@ struct TagView: View {
     
     var body: some View {
         Text(tag.label)
-            .font(.caption)
+            .font(.system(size: 11))
             .fontWeight(.medium)
             .foregroundColor(.white)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
             .background(tag.color)
-            .cornerRadius(8)
+            .cornerRadius(6)
     }
 }
