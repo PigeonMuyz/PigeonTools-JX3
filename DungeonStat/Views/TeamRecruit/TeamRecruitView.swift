@@ -15,41 +15,113 @@ struct TeamRecruitView: View {
     @State private var debouncedSearchText = ""
     @State private var tagsCache: [String: [ProfessionTag]] = [:]
     @State private var searchWorkItem: DispatchWorkItem?
+    @State private var filteredRecruitIds: Set<UUID> = []
+    @State private var isFiltering = false
     @EnvironmentObject var dungeonManager: DungeonManager
     
     
-    // 过滤后的招募信息（无状态修改版）
-    private var filteredRecruits: [TeamRecruitItem] {
+    // 优化后的过滤逻辑
+    private var displayedRecruits: [TeamRecruitItem] {
         let items = recruitService.recruitItems
         
+        // 如果正在过滤，显示当前状态
+        if isFiltering {
+            // 在过滤时继续显示已有的结果
+            if !filteredRecruitIds.isEmpty {
+                return items.filter { filteredRecruitIds.contains($0.id) }
+            }
+            return items
+        }
+        
+        // 使用缓存的过滤结果（如果有搜索文本）
+        if !debouncedSearchText.isEmpty {
+            return items.filter { filteredRecruitIds.contains($0.id) }
+        }
+        
+        // 没有搜索文本时，只应用基本过滤（金团和浪客行）
         return items.filter { item in
-            // 排除金团
-            if settings.filterGoldTeams {
-                let tags = getTagsWithoutCache(for: item)
-                let tagLabels = tags.map { $0.label }
-                if tagLabels.contains("金团") {
-                    return false
-                }
+            let tags = getCachedTags(for: item)
+            let tagLabels = tags.map { $0.label }
+            
+            if settings.filterGoldTeams && tagLabels.contains("金团") {
+                return false
             }
             
-            // 搜索筛选
-            if !debouncedSearchText.isEmpty && debouncedSearchText.count >= 2 {
-                let searchLower = debouncedSearchText.lowercased()
-                
-                // 文本匹配
-                let textMatch = item.matchesSearchText(debouncedSearchText)
-                
-                // 标签匹配
-                let tags = getTagsWithoutCache(for: item)
-                let tagLabels = tags.map { $0.label }
-                let tagMatch = tagLabels.contains { tag in
-                    tag.lowercased().contains(searchLower)
-                }
-                
-                return textMatch || tagMatch
+            if settings.filterPioneerTeams && tagLabels.contains("浪客行") {
+                return false
             }
             
             return true
+        }
+    }
+    
+    // 异步过滤方法
+    private func performFiltering() {
+        isFiltering = true
+        
+        Task {
+            let searchText = debouncedSearchText
+            let items = recruitService.recruitItems
+            let shouldFilterGold = settings.filterGoldTeams
+            let shouldFilterPioneer = settings.filterPioneerTeams
+            let enableSubsidySearch = settings.enableSubsidySearch
+            let enableProfessionSearch = settings.enableProfessionSearch
+            
+            // 在后台线程执行过滤
+            let filtered = await Task.detached(priority: .userInitiated) {
+                items.compactMap { item -> UUID? in
+                    let tags = self.getTagsWithoutCache(for: item)
+                    let tagLabels = tags.map { $0.label }
+                    
+                    // 搜索过滤
+                    if !searchText.isEmpty && searchText.count >= 2 {
+                        let searchLower = searchText.lowercased()
+                        
+                        // 检查是否明确搜索金团或浪客行
+                        let searchingForGold = searchLower.contains("金团") || searchLower.contains("金")
+                        let searchingForPioneer = searchLower.contains("浪客行") || searchLower.contains("浪客")
+                        
+                        // 如果不是明确搜索金团/浪客行，应用过滤
+                        if !searchingForGold && shouldFilterGold && tagLabels.contains("金团") {
+                            return nil
+                        }
+                        
+                        if !searchingForPioneer && shouldFilterPioneer && tagLabels.contains("浪客行") {
+                            return nil
+                        }
+                        
+                        // 检查文本匹配
+                        let textMatch = item.matchesSearchText(searchText, 
+                                                              enableSubsidySearch: enableSubsidySearch,
+                                                              enableProfessionSearch: enableProfessionSearch)
+                        let tagMatch = tagLabels.contains { tag in
+                            tag.lowercased().contains(searchLower)
+                        }
+                        
+                        if textMatch || tagMatch {
+                            return item.id
+                        } else {
+                            return nil
+                        }
+                    }
+                    
+                    // 没有搜索文本时，只应用基本过滤
+                    if shouldFilterGold && tagLabels.contains("金团") {
+                        return nil
+                    }
+                    
+                    if shouldFilterPioneer && tagLabels.contains("浪客行") {
+                        return nil
+                    }
+                    
+                    return item.id
+                }
+            }.value
+            
+            await MainActor.run {
+                self.filteredRecruitIds = Set(filtered)
+                self.isFiltering = false
+            }
         }
     }
     
@@ -79,7 +151,7 @@ struct TeamRecruitView: View {
                 .disabled(recruitService.isLoading || dungeonManager.selectedCharacter == nil)
             }
         }
-        .searchable(text: $searchText, prompt: "搜索活动、团长、内容或职业")
+        .searchable(text: $searchText, prompt: "搜索活动、团长、职业（如奶歌）、TN补")
         .onChange(of: searchText) { oldValue, newValue in
             // 取消之前的搜索任务
             searchWorkItem?.cancel()
@@ -98,11 +170,12 @@ struct TeamRecruitView: View {
             // 创建新的搜索任务
             let workItem = DispatchWorkItem {
                 debouncedSearchText = newValue
+                self.performFiltering()
             }
             
             searchWorkItem = workItem
-            // 延迟1.5秒执行搜索，减少频繁搜索
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.5, execute: workItem)
+            // 延迟0.5秒执行搜索，优化响应速度
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: workItem)
         }
         .onAppear {
             // 如果有选中的角色，默认使用其服务器
@@ -113,6 +186,18 @@ struct TeamRecruitView: View {
         .onDisappear {
             // 取消待执行的搜索任务
             searchWorkItem?.cancel()
+        }
+        .onChange(of: settings.filterGoldTeams) { _, _ in
+            // 过滤设置改变时重新过滤
+            performFiltering()
+        }
+        .onChange(of: settings.filterPioneerTeams) { _, _ in
+            // 过滤设置改变时重新过滤
+            performFiltering()
+        }
+        .onChange(of: recruitService.recruitItems) { _, _ in
+            // 数据更新时重新过滤
+            performFiltering()
         }
     }
     
@@ -176,12 +261,27 @@ struct TeamRecruitView: View {
     }
     
     private var recruitContentView: some View {
-        List(filteredRecruits) { item in
+        List(displayedRecruits) { item in
             TeamRecruitRow(item: item, tags: getCachedTags(for: item))
                 .id(item.id)
         }
         .refreshable {
             refreshRecruits()
+        }
+        .overlay(alignment: .top) {
+            if isFiltering {
+                HStack {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text("正在筛选...")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                .padding(8)
+                .background(Material.regular)
+                .cornerRadius(8)
+                .padding(.top, 8)
+            }
         }
     }
     

@@ -13,23 +13,24 @@ struct TeamRecruitSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     
     var body: some View {
-        NavigationView {
-            List {
-                // 金团设置
+        List {
+                // 过滤设置
                 Section {
-                    Toggle("在搜索结果中显示金团", isOn: $settings.showGoldTeamsInSearch)
-                        .toggleStyle(SwitchToggleStyle())
-                    
                     Toggle("过滤金团", isOn: $settings.filterGoldTeams)
                         .toggleStyle(SwitchToggleStyle())
-                        .disabled(!settings.showGoldTeamsInSearch)
+                    
+                    Toggle("过滤浪客行", isOn: $settings.filterPioneerTeams)
+                        .toggleStyle(SwitchToggleStyle())
                     
                 } header: {
-                    Text("金团设置")
+                    Text("过滤设置")
                 } footer: {
-                    Text("金团识别：内容包含 0抵消、来打手、包团 等关键字，或25人团且只有1人的情况")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("金团识别：内容包含 0抵消、来打手、包团 等关键字")
+                        Text("浪客行识别：标签包含 浪客行 关键字")
+                    }
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 }
                 
                 // 搜索设置
@@ -83,7 +84,6 @@ struct TeamRecruitSettingsView: View {
                     }
                 }
             }
-        }
     }
 }
 

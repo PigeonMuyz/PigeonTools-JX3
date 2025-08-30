@@ -24,6 +24,12 @@ class TeamRecruitSettings: ObservableObject {
         }
     }
     
+    @Published var filterPioneerTeams: Bool {
+        didSet {
+            UserDefaults.standard.set(filterPioneerTeams, forKey: "teamRecruit_filterPioneerTeams")
+        }
+    }
+    
     @Published var enableSubsidySearch: Bool {
         didSet {
             UserDefaults.standard.set(enableSubsidySearch, forKey: "teamRecruit_enableSubsidySearch")
@@ -39,12 +45,6 @@ class TeamRecruitSettings: ObservableObject {
     @Published var filterTeachingTeams: Bool {
         didSet {
             UserDefaults.standard.set(filterTeachingTeams, forKey: "teamRecruit_filterTeachingTeams")
-        }
-    }
-    
-    @Published var filterPioneerTeams: Bool {
-        didSet {
-            UserDefaults.standard.set(filterPioneerTeams, forKey: "teamRecruit_filterPioneerTeams")
         }
     }
     
@@ -69,10 +69,10 @@ class TeamRecruitSettings: ObservableObject {
     private init() {
         self.showGoldTeamsInSearch = UserDefaults.standard.object(forKey: "teamRecruit_showGoldTeamsInSearch") as? Bool ?? false
         self.filterGoldTeams = UserDefaults.standard.object(forKey: "teamRecruit_filterGoldTeams") as? Bool ?? true
+        self.filterPioneerTeams = UserDefaults.standard.object(forKey: "teamRecruit_filterPioneerTeams") as? Bool ?? true
         self.enableSubsidySearch = UserDefaults.standard.object(forKey: "teamRecruit_enableSubsidySearch") as? Bool ?? true
         self.enableProfessionSearch = UserDefaults.standard.object(forKey: "teamRecruit_enableProfessionSearch") as? Bool ?? true
         self.filterTeachingTeams = UserDefaults.standard.object(forKey: "teamRecruit_filterTeachingTeams") as? Bool ?? false
-        self.filterPioneerTeams = UserDefaults.standard.object(forKey: "teamRecruit_filterPioneerTeams") as? Bool ?? false
         self.showOnlyTeachingTeams = UserDefaults.standard.object(forKey: "teamRecruit_showOnlyTeachingTeams") as? Bool ?? false
         self.showOnlyPioneerTeams = UserDefaults.standard.object(forKey: "teamRecruit_showOnlyPioneerTeams") as? Bool ?? false
         self.selectedTags = UserDefaults.standard.object(forKey: "teamRecruit_selectedTags") as? [String] ?? []

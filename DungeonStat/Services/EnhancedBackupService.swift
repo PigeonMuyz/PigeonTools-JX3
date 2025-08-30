@@ -22,6 +22,7 @@ class EnhancedBackupService: ObservableObject {
     }
     
     // MARK: - 创建完整备份
+    @MainActor
     func createFullBackup(configuration: BackupConfiguration = BackupConfiguration.default) async -> BackupResult {
         do {
             let backupData = try await collectAllData(configuration: configuration)

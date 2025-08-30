@@ -190,11 +190,54 @@ extension TeamRecruitItem {
     }
     
     /// 简单的文本匹配（参考JSX实现）
-    func matchesSearchText(_ searchText: String) -> Bool {
+    func matchesSearchText(_ searchText: String, enableSubsidySearch: Bool = true, enableProfessionSearch: Bool = true) -> Bool {
         let content = self.content.lowercased()
         let activity = self.activity.lowercased()
         let leader = self.leader.lowercased()
         let searchLower = searchText.lowercased()
+        
+        // 补贴搜索（支持 "TN补"、"tn补"、"xxx补" 格式）
+        if enableSubsidySearch {
+            // 检查是否是补贴搜索格式
+            if searchLower.hasSuffix("补") || searchLower == "tn补" || searchLower == "tn" {
+                return hasSubsidy
+            }
+        }
+        
+        // 职业快速搜索
+        if enableProfessionSearch {
+            // 定义职业搜索映射
+            let professionMappings: [String: [String]] = [
+                "歌奶": ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"],
+                "奶歌": ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"],
+                "毒奶": ["奶毒", "毒奶"],
+                "奶毒": ["奶毒", "毒奶"],
+                "秀奶": ["奶秀", "秀奶"],
+                "奶秀": ["奶秀", "秀奶"],
+                "花奶": ["奶花", "花奶"],
+                "奶花": ["奶花", "花奶"],
+                "药奶": ["奶药", "药奶"],
+                "奶药": ["奶药", "药奶"],
+                "策t": ["策t", "天策t", "铁牢"],
+                "苍t": ["苍t", "王八t"],
+                "和尚t": ["和尚t", "秃t", "大师t"],
+                "喵t": ["喵t", "明教t"]
+            ]
+            
+            // 检查是否匹配职业关键词
+            if let patterns = professionMappings[searchLower] {
+                for pattern in patterns {
+                    if content.contains(pattern) ||
+                       content.contains("来\(pattern)") ||
+                       content.contains("求\(pattern)") ||
+                       content.contains("缺\(pattern)") {
+                        return true
+                    }
+                }
+                // 没有找到职业匹配，不继续其他搜索
+                return false
+            }
+        }
         
         // 直接匹配搜索词，类似JSX的实现
         return content.contains(searchLower) || 
