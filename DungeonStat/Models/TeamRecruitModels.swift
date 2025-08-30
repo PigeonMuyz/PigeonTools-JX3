@@ -135,23 +135,49 @@ extension TeamRecruitItem {
         let content = self.content.lowercased()
         let activity = self.activity.lowercased()
         
-        // 扩展的金团关键字
-        let goldKeywords = [
-            "0抵消", "来打手", "包团", "老板", "需求老板", "来老板",
-            "躺拍", "包牌子武器", "包大小铁", "低消", "包铁", "金团",
-            "躺老板", "包牌子", "包武器", "抵消", "来装备需求"
+        // 强金团标识 - 明确的金团关键字
+        let strongGoldKeywords = [
+            "金团", "包团", "躺老板", "需求老板", "来老板", "躺拍",
+            "包牌子武器", "包大小铁", "包铁", "包牌子", "包武器",
+            "来装备需求", "上车", "免躺", "跟躺", "可躺", "代开"
         ]
         
-        let hasGoldKeywords = goldKeywords.contains { keyword in
-            content.contains(keyword) || content.contains(keyword.replacingOccurrences(of: "z", with: ""))
+        // 检查强金团标识
+        for keyword in strongGoldKeywords {
+            if content.contains(keyword) {
+                return true
+            }
         }
         
-        // 检查数字+z模式 (如"2z", "3z"等)
-        let digitZPattern = "\\d+z"
-        let hasDigitZ = content.range(of: digitZPattern, options: .regularExpression) != nil
+        // 抵消相关的金团标识（需要结合数字）
+        let offsetPatterns = ["\\d+z抵消", "\\d+抵消", "0抵消", "抵消送", "抵消包"]
+        for pattern in offsetPatterns {
+            if content.range(of: pattern, options: .regularExpression) != nil {
+                return true
+            }
+        }
         
-        // 只有当content满足金团条件且number为1时才判断为金团
-        return (hasGoldKeywords || hasDigitZ) && number == 1
+        // 检查数字+z或数字+w模式 (如"2z", "55w", "59.5w"等) - 价格标识
+        let pricePatterns = ["\\d+z", "\\d+w", "\\d+\\.\\d+w"]
+        var hasPrice = false
+        for pattern in pricePatterns {
+            if content.range(of: pattern, options: .regularExpression) != nil {
+                hasPrice = true
+                break
+            }
+        }
+        
+        // 如果有价格标识，并且有其他金团相关词汇
+        if hasPrice {
+            let contextKeywords = ["老板", "抵消", "速刷", "效率", "送牌", "送武器", "来需求"]
+            for keyword in contextKeywords {
+                if content.contains(keyword) {
+                    return true
+                }
+            }
+        }
+        
+        return false
     }
     
     /// 是否为教学团
@@ -196,55 +222,75 @@ extension TeamRecruitItem {
         let leader = self.leader.lowercased()
         let searchLower = searchText.lowercased()
         
-        // 补贴搜索（支持 "TN补"、"tn补"、"xxx补" 格式）
+        // 补贴搜索（支持 "补"、"TN补"、"tn补"、"xxx补" 格式）
         if enableSubsidySearch {
             // 检查是否是补贴搜索格式
-            if searchLower.hasSuffix("补") || searchLower == "tn补" || searchLower == "tn" {
-                return hasSubsidy
+            if searchLower == "补" || searchLower.hasSuffix("补") || searchLower == "tn" {
+                // 更精确的补贴匹配
+                let subsidyPatterns = ["补\\d", "tn补", "tk补", "n补", "t补", "k补", "d补", "控补", "奶补", "车补"]
+                for pattern in subsidyPatterns {
+                    if content.range(of: pattern, options: .regularExpression) != nil {
+                        return true
+                    }
+                }
+                return false
             }
         }
         
         // 职业快速搜索
         if enableProfessionSearch {
-            // 定义职业搜索映射
-            let professionMappings: [String: [String]] = [
-                "奶": ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶", "奶毒", "毒奶", "奶秀", "秀奶", "奶花", "花奶", "奶药", "药奶"],
-                "歌奶": ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"],
-                "奶歌": ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"],
-                "毒奶": ["奶毒", "毒奶"],
-                "奶毒": ["奶毒", "毒奶"],
-                "秀奶": ["奶秀", "秀奶"],
-                "奶秀": ["奶秀", "秀奶"],
-                "花奶": ["奶花", "花奶"],
-                "奶花": ["奶花", "花奶"],
-                "药奶": ["奶药", "药奶"],
-                "奶药": ["奶药", "药奶"],
-                "t": ["策t", "天策t", "铁牢", "苍t", "王八t", "和尚t", "秃t", "大师t", "喵t", "明教t"],
-                "策t": ["策t", "天策t", "铁牢"],
-                "苍t": ["苍t", "王八t"],
-                "和尚t": ["和尚t", "秃t", "大师t"],
-                "喵t": ["喵t", "明教t"]
+            // 先进行游戏缩写匹配
+            let abbreviationMappings: [String: [String]] = [
+                "t": ["来t", "缺t", "求t", "要t", "tn", "tk", "td", "喵t", "策t", "苍t", "和尚t", "喵策", "铁牢"],
+                "n": ["来n", "缺n", "求n", "要n", "tn", "nk", "nd", "dn", "奶"],
+                "d": ["来d", "缺d", "求d", "要d", "td", "nd", "dk", "dn", "dps", "输出"],
+                "奶": ["奶", "来奶", "缺奶", "求奶", "要奶", "治疗", "tn", "dn", "n补"]
             ]
             
-            // 检查是否匹配职业关键词
+            // 检查缩写匹配
+            if let patterns = abbreviationMappings[searchLower] {
+                for pattern in patterns {
+                    // 使用单词边界匹配，避免误匹配
+                    let regex = "\\b\(pattern)\\b"
+                    if content.range(of: regex, options: [.regularExpression, .caseInsensitive]) != nil {
+                        return true
+                    }
+                }
+            }
+            
+            // 精确职业搜索映射
+            let professionMappings: [String: [String]] = [
+                "奶歌": ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"],
+                "歌奶": ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"],
+                "奶毒": ["奶毒", "毒奶"],
+                "毒奶": ["奶毒", "毒奶"],
+                "奶秀": ["奶秀", "秀奶"],
+                "秀奶": ["奶秀", "秀奶"],
+                "奶花": ["奶花", "花奶"],
+                "花奶": ["奶花", "花奶"],
+                "奶药": ["奶药", "药奶", "药宗"],
+                "药奶": ["奶药", "药奶", "药宗"],
+                "策t": ["策t", "天策t", "铁牢", "策"],
+                "苍t": ["苍t", "苍云t", "王八t"],
+                "和尚t": ["和尚t", "秃t", "大师t", "少林t"],
+                "喵t": ["喵t", "明教t", "喵喵t", "喵策"]
+            ]
+            
+            // 检查精确职业匹配
             if let patterns = professionMappings[searchLower] {
                 for pattern in patterns {
                     if content.contains(pattern) ||
                        content.contains("来\(pattern)") ||
                        content.contains("求\(pattern)") ||
-                       content.contains("缺\(pattern)") {
+                       content.contains("缺\(pattern)") ||
+                       content.contains("要\(pattern)") {
                         return true
                     }
-                }
-                // 对于特定的职业搜索关键词，如果没找到就不继续其他搜索
-                // 但对于通用词如"奶"或"t"，仍然继续进行普通文本搜索
-                if !["奶", "t"].contains(searchLower) {
-                    return false
                 }
             }
         }
         
-        // 直接匹配搜索词，类似JSX的实现
+        // 直接匹配搜索词
         return content.contains(searchLower) || 
                leader.contains(searchLower) || 
                activity.contains(searchLower)
@@ -252,56 +298,93 @@ extension TeamRecruitItem {
     
     /// 提取职业标签（参照JSX的extractTags函数）
     var extractedTags: [ProfessionTag] {
-        let content = self.content
+        let content = self.content.lowercased()
         var tags: [ProfessionTag] = []
+        var addedTags = Set<String>() // 用于去重
         
         // 检测金团标签
-        if isGoldTeam {
+        if isGoldTeam && !addedTags.contains("金团") {
             tags.append(ProfessionTag(label: "金团", color: .orange))
+            addedTags.insert("金团")
         }
         
         // 检测教学团标签  
-        if isTeachingTeam {
+        if isTeachingTeam && !addedTags.contains("教学团") {
             tags.append(ProfessionTag(label: "教学团", color: .blue))
+            addedTags.insert("教学团")
         }
         
         // 检测开荒团标签
-        if isPioneerTeam {
+        if isPioneerTeam && !addedTags.contains("开荒团") {
             tags.append(ProfessionTag(label: "开荒团", color: .green))
+            addedTags.insert("开荒团")
         }
         
-        // 职业标签配置（参照JSX的professionTags）
+        // 检测浪客行标签
+        if activity.contains("浪客行") && !addedTags.contains("浪客行") {
+            tags.append(ProfessionTag(label: "浪客行", color: .purple))
+            addedTags.insert("浪客行")
+        }
+        
+        // 检测缩写职业需求（如 TND、TNK 等）
+        let abbreviationPatterns: [(label: String, color: Color, patterns: [String])] = [
+            ("需T", .orange, ["来t", "缺t", "求t", "要t", "tn", "tk", "td", "t补"]),
+            ("需奶", .green, ["来奶", "缺奶", "求奶", "要奶", "来n", "缺n", "tn", "dn", "n补", "奶补", "治疗"]),
+            ("需输出", .red, ["来d", "缺d", "求d", "dps", "输出", "td", "dn", "d补", "来输出", "缺输出"]),
+            ("需控", .blue, ["来控", "缺控", "控补", "k补", "tk", "nk", "dk"])
+        ]
+        
+        for (label, color, patterns) in abbreviationPatterns {
+            if !addedTags.contains(label) {
+                for pattern in patterns {
+                    // 使用单词边界匹配
+                    let regex = "\\b\(pattern)\\b"
+                    if content.range(of: regex, options: [.regularExpression, .caseInsensitive]) != nil {
+                        tags.append(ProfessionTag(label: label, color: color))
+                        addedTags.insert(label)
+                        break
+                    }
+                }
+            }
+        }
+        
+        // 职业标签配置（精确职业）
         let professionPatterns: [(label: String, color: Color, patterns: [String])] = [
             ("奶歌", .cyan, ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"]),
             ("奶毒", .purple, ["奶毒", "毒奶"]),
             ("奶秀", .red, ["奶秀", "秀奶"]),
             ("奶花", .green, ["奶花", "花奶"]),
-            ("奶药", .yellow, ["奶药", "药奶"]),
-            ("策T", .orange, ["策t", "天策t", "铁牢"]),
-            ("苍T", .gray, ["苍t", "王八t"]),
-            ("和尚T", .brown, ["和尚t", "秃t", "大师t"]),
-            ("喵T", .pink, ["喵t", "明教t"])
+            ("奶药", .yellow, ["奶药", "药奶", "药宗"]),
+            ("策T", .orange, ["策t", "天策t", "铁牢", "喵策"]),
+            ("苍T", .gray, ["苍t", "苍云t", "王八t"]),
+            ("和尚T", .brown, ["和尚t", "秃t", "大师t", "少林t"]),
+            ("喵T", .pink, ["喵t", "明教t", "喵喵t"])
         ]
         
-        // 检测职业标签
-        for profession in professionPatterns {
-            // 检查是否匹配任一模式
-            let hasMatch = profession.patterns.contains { pattern in
-                // 使用正则表达式确保精确匹配，避免误匹配
-                let regex = "(^|[^\\u4e00-\\u9fa5])\(pattern)($|[^\\u4e00-\\u9fa5])"
-                return content.range(of: regex, options: .regularExpression) != nil ||
+        // 检测具体职业标签
+        for (label, color, patterns) in professionPatterns {
+            if !addedTags.contains(label) {
+                for pattern in patterns {
+                    if content.contains(pattern) ||
                        content.contains("来\(pattern)") ||
                        content.contains("求\(pattern)") ||
-                       content.contains("缺\(pattern)")
-            }
-            
-            if hasMatch {
-                tags.append(ProfessionTag(label: profession.label, color: profession.color))
+                       content.contains("缺\(pattern)") ||
+                       content.contains("要\(pattern)") {
+                        tags.append(ProfessionTag(label: label, color: color))
+                        addedTags.insert(label)
+                        break // 找到一个匹配就跳出内层循环
+                    }
+                }
             }
         }
         
-        // 去重
-        return Array(Set(tags))
+        // 检测补贴标签
+        if hasSubsidy && !addedTags.contains("有补贴") {
+            tags.append(ProfessionTag(label: "有补贴", color: .green))
+            addedTags.insert("有补贴")
+        }
+        
+        return tags
     }
 }
 
