@@ -80,11 +80,6 @@ struct CategoryEditorView: View {
                                         .fill(Color(category.color))
                                         .frame(width: 24, height: 24)
                                     
-                                    Image(systemName: category.icon)
-                                        .font(.body)
-                                        .foregroundColor(.primary)
-                                        .frame(width: 24)
-                                    
                                     Text(category.name)
                                         .foregroundColor(.primary)
                                     
