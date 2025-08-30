@@ -30,17 +30,6 @@ class TeamRecruitSettings: ObservableObject {
         }
     }
     
-    @Published var enableSubsidySearch: Bool {
-        didSet {
-            UserDefaults.standard.set(enableSubsidySearch, forKey: "teamRecruit_enableSubsidySearch")
-        }
-    }
-    
-    @Published var enableProfessionSearch: Bool {
-        didSet {
-            UserDefaults.standard.set(enableProfessionSearch, forKey: "teamRecruit_enableProfessionSearch")
-        }
-    }
     
     @Published var filterTeachingTeams: Bool {
         didSet {
@@ -70,8 +59,6 @@ class TeamRecruitSettings: ObservableObject {
         self.showGoldTeamsInSearch = UserDefaults.standard.object(forKey: "teamRecruit_showGoldTeamsInSearch") as? Bool ?? false
         self.filterGoldTeams = UserDefaults.standard.object(forKey: "teamRecruit_filterGoldTeams") as? Bool ?? true
         self.filterPioneerTeams = UserDefaults.standard.object(forKey: "teamRecruit_filterPioneerTeams") as? Bool ?? true
-        self.enableSubsidySearch = UserDefaults.standard.object(forKey: "teamRecruit_enableSubsidySearch") as? Bool ?? true
-        self.enableProfessionSearch = UserDefaults.standard.object(forKey: "teamRecruit_enableProfessionSearch") as? Bool ?? true
         self.filterTeachingTeams = UserDefaults.standard.object(forKey: "teamRecruit_filterTeachingTeams") as? Bool ?? false
         self.showOnlyTeachingTeams = UserDefaults.standard.object(forKey: "teamRecruit_showOnlyTeachingTeams") as? Bool ?? false
         self.showOnlyPioneerTeams = UserDefaults.standard.object(forKey: "teamRecruit_showOnlyPioneerTeams") as? Bool ?? false

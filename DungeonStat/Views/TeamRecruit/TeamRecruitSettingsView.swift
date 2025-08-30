@@ -33,24 +33,6 @@ struct TeamRecruitSettingsView: View {
                     .foregroundColor(.secondary)
                 }
                 
-                // 搜索设置
-                Section {
-                    Toggle("支持快速搜索TN补", isOn: $settings.enableSubsidySearch)
-                        .toggleStyle(SwitchToggleStyle())
-                    
-                    Toggle("支持职业快速搜索", isOn: $settings.enableProfessionSearch)
-                        .toggleStyle(SwitchToggleStyle())
-                    
-                } header: {
-                    Text("搜索设置")
-                } footer: {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("TN补搜索：匹配内容中的 补1 、 补500 等补贴信息")
-                        Text("职业搜索：支持歌奶、药奶、秀奶、毒奶、花奶等职业关键字")
-                    }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                }
                 
                 // 帮助信息
                 Section {
@@ -63,9 +45,11 @@ struct TeamRecruitSettingsView: View {
                         }
                         
                         VStack(alignment: .leading, spacing: 8) {
-                            Text("• 搜索 TN补 或 xxx补 可查找有补贴的团队")
-                            Text("• 搜索职业关键字可快速找到对应职业缺位")
-                            Text("• 支持同时搜索活动名称、团长和内容")
+                            Text("• 单字母搜索：T、N、D 快速找坦克、奶妈、输出")
+                            Text("• 职业搜索：奶歌、毒奶、策T等精确职业")
+                            Text("• 补贴搜索：输入\"补\"或\"TN补\"查找有补贴团队")
+                            Text("• 通用搜索：支持活动名称、团长、内容关键字")
+                            Text("• 明确搜索金团或浪客行时不会被过滤")
                         }
                         .font(.subheadline)
                         .foregroundColor(.secondary)

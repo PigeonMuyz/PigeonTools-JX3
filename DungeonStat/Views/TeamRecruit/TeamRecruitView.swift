@@ -64,8 +64,6 @@ struct TeamRecruitView: View {
             let items = recruitService.recruitItems
             let shouldFilterGold = settings.filterGoldTeams
             let shouldFilterPioneer = settings.filterPioneerTeams
-            let enableSubsidySearch = settings.enableSubsidySearch
-            let enableProfessionSearch = settings.enableProfessionSearch
             
             // 在后台线程执行过滤
             let filtered = await Task.detached(priority: .userInitiated) {
@@ -90,10 +88,8 @@ struct TeamRecruitView: View {
                             return nil
                         }
                         
-                        // 检查文本匹配
-                        let textMatch = item.matchesSearchText(searchText, 
-                                                              enableSubsidySearch: enableSubsidySearch,
-                                                              enableProfessionSearch: enableProfessionSearch)
+                        // 检查文本匹配（默认启用所有搜索功能）
+                        let textMatch = item.matchesSearchText(searchText)
                         let tagMatch = tagLabels.contains { tag in
                             tag.lowercased().contains(searchLower)
                         }
