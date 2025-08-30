@@ -14,6 +14,22 @@ struct TeamRecruitSettingsView: View {
     
     var body: some View {
         List {
+                // 显示设置
+                Section {
+                    Picker("显示模式", selection: $settings.viewMode) {
+                        ForEach(TeamRecruitViewMode.allCases, id: \.self) { mode in
+                            Text(mode.rawValue).tag(mode)
+                        }
+                    }
+                    .pickerStyle(SegmentedPickerStyle())
+                } header: {
+                    Text("显示设置")
+                } footer: {
+                    Text("紧凑视图可在列表中显示更多招募信息")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                
                 // 过滤设置
                 Section {
                     Toggle("过滤金团", isOn: $settings.filterGoldTeams)
@@ -61,13 +77,6 @@ struct TeamRecruitSettingsView: View {
             }
             .navigationTitle("团队招募设置")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("完成") {
-                        dismiss()
-                    }
-                }
-            }
     }
 }
 

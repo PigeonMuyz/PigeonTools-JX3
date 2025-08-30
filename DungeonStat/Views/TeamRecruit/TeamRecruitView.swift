@@ -258,8 +258,13 @@ struct TeamRecruitView: View {
     
     private var recruitContentView: some View {
         List(displayedRecruits) { item in
-            TeamRecruitRow(item: item, tags: getCachedTags(for: item))
-                .id(item.id)
+            if settings.viewMode == .compact {
+                TeamRecruitCompactRow(item: item, tags: getCachedTags(for: item))
+                    .id(item.id)
+            } else {
+                TeamRecruitRow(item: item, tags: getCachedTags(for: item))
+                    .id(item.id)
+            }
         }
         .refreshable {
             refreshRecruits()
@@ -313,6 +318,82 @@ struct TeamRecruitView: View {
     }
 }
 
+// MARK: - 紧凑行视图
+struct TeamRecruitCompactRow: View {
+    let item: TeamRecruitItem
+    let tags: [ProfessionTag]
+    
+    private var memberStatusColor: Color {
+        item.isFull ? .red : .blue
+    }
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // 第一行：活动、团长、人数
+            HStack {
+                Text(item.activity)
+                    .font(.subheadline)
+                    .fontWeight(.medium)
+                    .foregroundColor(.primary)
+                    .lineLimit(1)
+                
+                Text("·")
+                    .foregroundColor(.secondary)
+                
+                Text(item.leader)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                
+                Spacer()
+                
+                if item.isFull {
+                    Text("已满")
+                        .font(.caption2)
+                        .fontWeight(.medium)
+                        .foregroundColor(.white)
+                        .padding(.horizontal, 4)
+                        .padding(.vertical, 1)
+                        .background(Color.red)
+                        .cornerRadius(3)
+                } else {
+                    Text(item.memberStatus)
+                        .font(.caption)
+                        .foregroundColor(memberStatusColor)
+                }
+            }
+            
+            // 第二行：内容（单行）
+            if !item.content.isEmpty {
+                Text(item.content)
+                    .font(.caption)
+                    .foregroundColor(.primary.opacity(0.8))
+                    .lineLimit(1)
+            }
+            
+            // 标签（水平排列，最多显示）
+            if !tags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 3) {
+                        ForEach(tags.prefix(6)) { tag in
+                            Text(tag.label)
+                                .font(.caption2)
+                                .fontWeight(.medium)
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 4)
+                                .padding(.vertical, 2)
+                                .background(tag.color)
+                                .cornerRadius(4)
+                        }
+                    }
+                }
+            }
+        }
+        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+    }
+}
+
 // MARK: - 团队招募行视图
 struct TeamRecruitRow: View {
     let item: TeamRecruitItem
@@ -332,7 +413,7 @@ struct TeamRecruitRow: View {
             // 顶部：活动名称和人数状态
             HStack {
                 Text(item.activity)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.headline)
                     .foregroundColor(.primary)
                     .lineLimit(1)
                 
@@ -342,7 +423,7 @@ struct TeamRecruitRow: View {
                     // 已满标签（放在人数左侧）
                     if item.isFull {
                         Text("已满")
-                            .font(.system(size: 11))
+                            .font(.caption2)
                             .fontWeight(.medium)
                             .foregroundColor(.white)
                             .padding(.horizontal, 5)
@@ -353,7 +434,7 @@ struct TeamRecruitRow: View {
                     
                     // 人数状态
                     Text(item.memberStatus)
-                        .font(.system(size: 13))
+                        .font(.footnote)
                         .fontWeight(.medium)
                         .foregroundColor(memberStatusColor)
                         .padding(.horizontal, 6)
@@ -369,10 +450,10 @@ struct TeamRecruitRow: View {
             HStack(spacing: 6) {
                 Image(systemName: "person.crop.circle")
                     .foregroundColor(.secondary)
-                    .font(.system(size: 11))
+                    .font(.caption)
                 
                 Text(item.leader)
-                    .font(.system(size: 13))
+                    .font(.subheadline)
                     .foregroundColor(.secondary)
                 
                 Spacer()
@@ -381,7 +462,7 @@ struct TeamRecruitRow: View {
             // 招募内容
             if !item.content.isEmpty {
                 Text(item.content)
-                    .font(.system(size: 14))
+                    .font(.body)
                     .foregroundColor(.primary)
                     .lineLimit(3)
                     .fixedSize(horizontal: false, vertical: true)
@@ -412,7 +493,7 @@ struct TagView: View {
     
     var body: some View {
         Text(tag.label)
-            .font(.system(size: 11))
+            .font(.caption2)
             .fontWeight(.medium)
             .foregroundColor(.white)
             .padding(.horizontal, 6)
