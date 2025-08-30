@@ -817,6 +817,35 @@ struct DashboardView: View {
     var body: some View {
         NavigationView {
             List {
+                // 欢迎回来区域（根据设置显示）
+                if showWelcomeBackRow {
+                    Section {
+                        WelcomeBackRow()
+                    }
+                }
+                
+                // 周副本完成进度（圆形进度条）
+                Section {
+                    WeeklyProgressRow()
+                }
+                
+                // 本周副本状态
+                Section(header: HStack {
+                    Text("本周副本状态")
+                    Spacer()
+                    if dungeonManager.selectedCharacter != nil {
+                        Button(action: {
+                            weeklyCdRefreshTrigger += 1
+                        }) {
+                            Image(systemName: "arrow.clockwise")
+                                .foregroundColor(.blue)
+                                .font(.caption)
+                        }
+                    }
+                }) {
+                    WeeklyCdStatusCard(refreshTrigger: weeklyCdRefreshTrigger)
+                }
+                
                 // 全局进行中任务
                 Section(header: Text("进行中的任务")) {
                     AllInProgressTasksRows()

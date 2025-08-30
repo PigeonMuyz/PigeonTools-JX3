@@ -52,6 +52,8 @@ class DailyTaskManager: ObservableObject {
         isLoading = true
         defer { isLoading = false }
         
+        // 暂时禁用获取日常活动数据的功能
+        /*
         do {
             // 获取所有服务器的唯一列表
             let servers = Array(Set(characters.map { $0.server }))
@@ -87,6 +89,12 @@ class DailyTaskManager: ObservableObject {
         } catch {
             print("刷新日常任务失败: \(error)")
         }
+        */
+        
+        // 只更新刷新时间，不获取服务器数据
+        lastRefreshTime = Date()
+        saveStoredTasks()
+        print("日常任务刷新完成（已跳过服务器数据获取）")
     }
     
     private func updateDailyTasks(for character: GameCharacter, with activityData: JX3DailyActivityData, date: String) {
