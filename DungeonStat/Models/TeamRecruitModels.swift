@@ -246,6 +246,8 @@ extension TeamRecruitItem {
         
         // 职业快速搜索
         if enableProfessionSearch {
+            var foundProfessionMatch = false
+            
             // 先进行游戏缩写匹配
             let abbreviationMappings: [String: [String]] = [
                 "t": ["来t", "缺t", "求t", "要t", "tn", "tk", "td", "喵t", "策t", "苍t", "和尚t", "喵策", "铁牢"],
@@ -260,7 +262,8 @@ extension TeamRecruitItem {
                     // 使用单词边界匹配，避免误匹配
                     let regex = "\\b\(pattern)\\b"
                     if content.range(of: regex, options: [.regularExpression, .caseInsensitive]) != nil {
-                        return true
+                        foundProfessionMatch = true
+                        break
                     }
                 }
             }
@@ -284,17 +287,26 @@ extension TeamRecruitItem {
             ]
             
             // 检查精确职业匹配
-            if let patterns = professionMappings[searchLower] {
-                for pattern in patterns {
-                    if content.contains(pattern) ||
-                       content.contains("来\(pattern)") ||
-                       content.contains("求\(pattern)") ||
-                       content.contains("缺\(pattern)") ||
-                       content.contains("要\(pattern)") {
-                        return true
+            if !foundProfessionMatch && professionMappings[searchLower] != nil {
+                if let patterns = professionMappings[searchLower] {
+                    for pattern in patterns {
+                        if content.contains(pattern) ||
+                           content.contains("来\(pattern)") ||
+                           content.contains("求\(pattern)") ||
+                           content.contains("缺\(pattern)") ||
+                           content.contains("要\(pattern)") {
+                            foundProfessionMatch = true
+                            break
+                        }
                     }
                 }
             }
+            
+            // 如果找到了职业匹配，直接返回结果
+            if foundProfessionMatch {
+                return true
+            }
+            // 如果没找到职业匹配，继续进行普通文本搜索
         }
         
         // 直接匹配搜索词
