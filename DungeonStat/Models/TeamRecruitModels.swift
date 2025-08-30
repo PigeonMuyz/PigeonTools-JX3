@@ -251,7 +251,7 @@ extension TeamRecruitItem {
             // 先进行游戏缩写匹配
             let abbreviationMappings: [String: [String]] = [
                 "t": ["来t", "缺t", "求t", "要t", "tn", "tk", "td", "喵t", "策t", "苍t", "和尚t", "喵策", "铁牢"],
-                "n": ["来n", "缺n", "求n", "要n", "tn", "nk", "nd", "dn", "奶"],
+                "n": ["来n", "缺n", "求n", "要n", "tn", "nk", "nd", "dn", "奶", "n补"],
                 "d": ["来d", "缺d", "求d", "要d", "td", "nd", "dk", "dn", "dps", "输出"],
                 "奶": ["奶", "来奶", "缺奶", "求奶", "要奶", "治疗", "tn", "dn", "n补"]
             ]
@@ -259,11 +259,48 @@ extension TeamRecruitItem {
             // 检查缩写匹配
             if let patterns = abbreviationMappings[searchLower] {
                 for pattern in patterns {
-                    // 使用单词边界匹配，避免误匹配
-                    let regex = "\\b\(pattern)\\b"
-                    if content.range(of: regex, options: [.regularExpression, .caseInsensitive]) != nil {
-                        foundProfessionMatch = true
-                        break
+                    // 特殊处理单字母搜索（T、N、D）
+                    if searchLower.count == 1 && ["t", "n", "d"].contains(searchLower) {
+                        // 单字母搜索使用更宽松的匹配
+                        let upperSearch = searchLower.uppercased()
+                        let lowerSearch = searchLower.lowercased()
+                        
+                        // 检查各种形式：TN、TD、DN、来T、缺N等
+                        if content.contains(upperSearch) || content.contains(lowerSearch) {
+                            // 需要验证是否在正确的上下文中
+                            let contextPatterns = [
+                                "\\b\(upperSearch)\\b",  // 独立的大写字母
+                                "\\b\(lowerSearch)\\b",  // 独立的小写字母
+                                "T\(upperSearch)",       // TN, TD
+                                "\(upperSearch)N",       // TN, DN
+                                "\(upperSearch)D",       // ND, TD
+                                "\(upperSearch)K",       // NK, TK
+                                "来\(upperSearch)",
+                                "来\(lowerSearch)",
+                                "缺\(upperSearch)",
+                                "缺\(lowerSearch)",
+                                "\(upperSearch)补",
+                                "\(lowerSearch)补"
+                            ]
+                            
+                            for contextPattern in contextPatterns {
+                                if content.range(of: contextPattern, options: [.regularExpression, .caseInsensitive]) != nil {
+                                    foundProfessionMatch = true
+                                    break
+                                }
+                            }
+                            
+                            if foundProfessionMatch {
+                                break
+                            }
+                        }
+                    } else {
+                        // 非单字母搜索使用原有逻辑
+                        let regex = "\\b\(pattern)\\b"
+                        if content.range(of: regex, options: [.regularExpression, .caseInsensitive]) != nil {
+                            foundProfessionMatch = true
+                            break
+                        }
                     }
                 }
             }
