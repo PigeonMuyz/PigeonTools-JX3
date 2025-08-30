@@ -355,6 +355,42 @@ extension TeamRecruitItem {
             }
         }
         
+        // 先检测组合职业标识
+        let combinedPatterns: [(patterns: [String], professions: [String])] = [
+            (["花秀", "秀花"], ["奶花", "奶秀"]),
+            (["花秀歌", "秀花歌"], ["奶花", "奶秀", "奶歌"]),
+            (["秃苍"], ["和尚T", "苍T"])
+        ]
+        
+        // 检测组合职业
+        for (patterns, professions) in combinedPatterns {
+            for pattern in patterns {
+                if content.contains(pattern) {
+                    for profession in professions {
+                        if !addedTags.contains(profession) {
+                            // 根据职业名找到对应的颜色
+                            let color: Color = {
+                                switch profession {
+                                case "奶歌": return .cyan
+                                case "奶毒": return .purple
+                                case "奶秀": return .red
+                                case "奶花": return .green
+                                case "奶药": return .yellow
+                                case "策T": return .orange
+                                case "苍T": return .gray
+                                case "和尚T": return .brown
+                                case "喵T": return .pink
+                                default: return .blue
+                                }
+                            }()
+                            tags.append(ProfessionTag(label: profession, color: color))
+                            addedTags.insert(profession)
+                        }
+                    }
+                }
+            }
+        }
+        
         // 职业标签配置（精确职业）
         let professionPatterns: [(label: String, color: Color, patterns: [String])] = [
             ("奶歌", .cyan, ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"]),
@@ -362,24 +398,45 @@ extension TeamRecruitItem {
             ("奶秀", .red, ["奶秀", "秀奶"]),
             ("奶花", .green, ["奶花", "花奶"]),
             ("奶药", .yellow, ["奶药", "药奶", "药宗"]),
-            ("策T", .orange, ["策t", "天策t", "铁牢", "喵策"]),
-            ("苍T", .gray, ["苍t", "苍云t", "王八t"]),
-            ("和尚T", .brown, ["和尚t", "秃t", "大师t", "少林t"]),
-            ("喵T", .pink, ["喵t", "明教t", "喵喵t"])
+            ("策T", .orange, ["策t", "天策t", "铁牢", "喵策", "策"]),
+            ("苍T", .gray, ["苍t", "苍云t", "王八t", "苍"]),
+            ("和尚T", .brown, ["和尚t", "秃t", "大师t", "少林t", "秃", "和尚"]),
+            ("喵T", .pink, ["喵t", "明教t", "喵喵t", "喵"])
         ]
         
-        // 检测具体职业标签
+        // 检测具体职业标签 - 不要在找到匹配后立即跳出，要检查所有职业
         for (label, color, patterns) in professionPatterns {
             if !addedTags.contains(label) {
+                var found = false
                 for pattern in patterns {
-                    if content.contains(pattern) ||
-                       content.contains("来\(pattern)") ||
-                       content.contains("求\(pattern)") ||
-                       content.contains("缺\(pattern)") ||
-                       content.contains("要\(pattern)") {
+                    // 对于单字匹配（如"秃"、"苍"），需要更严格的上下文
+                    if pattern.count == 1 {
+                        // 单字需要配合其他关键词
+                        let contextPatterns = [
+                            "来\(pattern)", "缺\(pattern)", "求\(pattern)", "要\(pattern)",
+                            "\(pattern)t", "\(pattern)T", "来\(pattern)苍", "来秃\(pattern)"
+                        ]
+                        for contextPattern in contextPatterns {
+                            if content.contains(contextPattern.lowercased()) {
+                                found = true
+                                break
+                            }
+                        }
+                    } else {
+                        // 多字符模式正常匹配
+                        if content.contains(pattern) ||
+                           content.contains("来\(pattern)") ||
+                           content.contains("求\(pattern)") ||
+                           content.contains("缺\(pattern)") ||
+                           content.contains("要\(pattern)") {
+                            found = true
+                        }
+                    }
+                    
+                    if found {
                         tags.append(ProfessionTag(label: label, color: color))
                         addedTags.insert(label)
-                        break // 找到一个匹配就跳出内层循环
+                        break // 只在这个职业内部跳出，继续检查其他职业
                     }
                 }
             }
