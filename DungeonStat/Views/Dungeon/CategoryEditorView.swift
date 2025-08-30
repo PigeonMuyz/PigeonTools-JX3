@@ -14,6 +14,7 @@ struct CategoryEditorView: View {
     @State private var selectedCategoryId: UUID?
     @State private var showingCustomCategoryInput = false
     @State private var customCategoryName = ""
+    @State private var customCategoryOrder = "50"
     
     var body: some View {
         NavigationView {
@@ -152,20 +153,50 @@ struct CategoryEditorView: View {
                 }
             }
         }
-        .alert("自定义分类", isPresented: $showingCustomCategoryInput) {
-            TextField("分类名称", text: $customCategoryName)
-            Button("确定") {
-                if !customCategoryName.isEmpty {
-                    dungeonManager.setDungeonCustomCategory(dungeon, categoryName: customCategoryName)
-                    customCategoryName = ""
-                    isPresented = false
+        .sheet(isPresented: $showingCustomCategoryInput) {
+            NavigationView {
+                Form {
+                    Section(header: Text("分类信息")) {
+                        TextField("分类名称", text: $customCategoryName)
+                        
+                        HStack {
+                            Text("排序值")
+                            TextField("输入数字(越小越靠前)", text: $customCategoryOrder)
+                                .keyboardType(.numberPad)
+                                .multilineTextAlignment(.trailing)
+                        }
+                        
+                        Text("提示：排序值决定分类在列表中的位置\n• 预设分类：1-4\n• 建议自定义：10-900\n• 其他分类：999")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
+                .navigationTitle("创建自定义分类")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button("取消") {
+                            customCategoryName = ""
+                            customCategoryOrder = "50"
+                            showingCustomCategoryInput = false
+                        }
+                    }
+                    
+                    ToolbarItem(placement: .navigationBarTrailing) {
+                        Button("创建") {
+                            if !customCategoryName.isEmpty {
+                                let order = Int(customCategoryOrder) ?? 50
+                                dungeonManager.setDungeonCustomCategory(dungeon, categoryName: customCategoryName, order: order)
+                                customCategoryName = ""
+                                customCategoryOrder = "50"
+                                showingCustomCategoryInput = false
+                                isPresented = false
+                            }
+                        }
+                        .disabled(customCategoryName.isEmpty)
+                    }
                 }
             }
-            Button("取消", role: .cancel) {
-                customCategoryName = ""
-            }
-        } message: {
-            Text("请输入自定义分类的名称")
         }
         .onAppear {
             // 初始化选中的分类

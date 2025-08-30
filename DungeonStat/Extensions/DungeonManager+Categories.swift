@@ -104,10 +104,11 @@ extension DungeonManager {
         }
     }
     
-    func setDungeonCustomCategory(_ dungeon: Dungeon, categoryName: String) {
+    func setDungeonCustomCategory(_ dungeon: Dungeon, categoryName: String, order: Int = 998) {
         if let index = dungeons.firstIndex(where: { $0.id == dungeon.id }) {
             dungeons[index].categoryId = nil
             dungeons[index].customCategory = categoryName.isEmpty ? nil : categoryName
+            dungeons[index].customCategoryOrder = categoryName.isEmpty ? nil : order
             saveData()
         }
     }
@@ -154,12 +155,20 @@ extension DungeonManager {
             }
         }
         
-        // 添加自定义分类
-        for (categoryName, dungeons) in customCategoryDungeons.sorted(by: { $0.key < $1.key }) {
+        // 添加自定义分类（按order排序）
+        var customCategories: [(name: String, order: Int, dungeons: [Dungeon])] = []
+        for (categoryName, dungeons) in customCategoryDungeons {
+            // 获取该分类下第一个副本的order值（同一分类下的副本应该有相同的order）
+            let order = dungeons.first?.customCategoryOrder ?? 998
+            customCategories.append((name: categoryName, order: order, dungeons: dungeons))
+        }
+        
+        // 按order排序自定义分类
+        for item in customCategories.sorted(by: { $0.order < $1.order }) {
             // 使用分类名称的哈希值创建一个稳定的UUID，确保同名分类的ID始终相同
-            let stableId = UUID(uuidString: "00000000-0000-0000-0000-" + String(format: "%012x", abs(categoryName.hashValue))) ?? UUID()
-            let customCategory = DungeonCategory(id: stableId, name: categoryName, order: 998, isDefault: false, color: "gray", icon: "folder.fill")
-            result.append((category: customCategory, dungeons: dungeons))
+            let stableId = UUID(uuidString: "00000000-0000-0000-0000-" + String(format: "%012x", abs(item.name.hashValue))) ?? UUID()
+            let customCategory = DungeonCategory(id: stableId, name: item.name, order: item.order, isDefault: false, color: "gray", icon: "folder.fill")
+            result.append((category: customCategory, dungeons: item.dungeons))
         }
         
         // 添加未分类的副本

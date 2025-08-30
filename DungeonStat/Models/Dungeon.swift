@@ -13,6 +13,7 @@ struct Dungeon: Identifiable, Codable, Hashable {
     var name: String
     var categoryId: UUID? // 分类ID，可为空
     var customCategory: String? // 用户自定义分类名称
+    var customCategoryOrder: Int? // 自定义分类的排序值
     var characterCounts: [GameCharacter: Int] = [:] // 每个角色的当前计数
     var characterWeeklyCounts: [GameCharacter: Int] = [:] // 每个角色的周计数
     var characterTotalCounts: [GameCharacter: Int] = [:] // 每个角色的总计数
