@@ -132,8 +132,15 @@ extension TeamRecruitItem {
     
     /// 是否为金团
     var isGoldTeam: Bool {
-        let content = self.content.lowercased()
+        // 金团的前置条件：必须是25人团且当前人数为1
+        guard number == 1 else { return false }
+        
+        // 检查是否为25人副本
         let activity = self.activity.lowercased()
+        let is25ManRaid = activity.contains("25人") || maxNumber == 25
+        guard is25ManRaid else { return false }
+        
+        let content = self.content.lowercased()
         
         // 强金团标识 - 明确的金团关键字
         let strongGoldKeywords = [
