@@ -13,6 +13,8 @@ struct DungeonListView: View {
     @State private var showingAddDungeon = false
     @State private var newDungeonName = ""
     @State private var showingCharacterSelector = false
+    @State private var showingCategoryEditor = false
+    @State private var selectedDungeonForCategory: Dungeon?
     
     var body: some View {
         NavigationView {
@@ -22,6 +24,23 @@ struct DungeonListView: View {
                         if !isCategoryCollapsed(categoryGroup.category) {
                             ForEach(Array(categoryGroup.dungeons.enumerated()), id: \.element.id) { index, dungeon in
                                 DungeonRowView(dungeon: dungeon, index: dungeonManager.dungeons.firstIndex(where: { $0.id == dungeon.id }) ?? index)
+                                    .swipeActions(edge: .trailing, allowsFullSwipe: false) {
+                                        Button {
+                                            selectedDungeonForCategory = dungeon
+                                            showingCategoryEditor = true
+                                        } label: {
+                                            Label("分类", systemImage: "folder")
+                                        }
+                                        .tint(.blue)
+                                        
+                                        Button(role: .destructive) {
+                                            if let globalIndex = dungeonManager.dungeons.firstIndex(where: { $0.id == dungeon.id }) {
+                                                dungeonManager.deleteDungeon(at: globalIndex)
+                                            }
+                                        } label: {
+                                            Label("删除", systemImage: "trash")
+                                        }
+                                    }
                             }
                         }
                     }
@@ -59,6 +78,12 @@ struct DungeonListView: View {
             }
             .sheet(isPresented: $showingCharacterSelector) {
                 CharacterSelectorView(isPresented: $showingCharacterSelector)
+            }
+            .sheet(isPresented: $showingCategoryEditor) {
+                if let dungeon = selectedDungeonForCategory {
+                    CategoryEditorView(dungeon: dungeon, isPresented: $showingCategoryEditor)
+                        .environmentObject(dungeonManager)
+                }
             }
         }
     }

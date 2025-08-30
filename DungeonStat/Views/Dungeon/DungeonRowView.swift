@@ -75,9 +75,6 @@ struct DungeonRowView: View {
             }
         }
         .padding(.vertical, 8)
-        .contextMenu {
-            CategoryContextMenu(dungeon: dungeon)
-        }
         .onReceive(timer) { _ in
             currentTime = Date()
             checkForNewCompletion()
