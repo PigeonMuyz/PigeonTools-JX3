@@ -400,7 +400,6 @@ struct TeamRecruitRow: View {
         }
         .padding(.vertical, 12)
         .padding(.horizontal, 16)
-        .background(item.isFull ? Color.gray.opacity(0.05) : Color.clear)
     }
     
     // 缓存网格列配置
