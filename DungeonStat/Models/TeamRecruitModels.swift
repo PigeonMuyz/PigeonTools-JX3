@@ -404,11 +404,22 @@ extension TeamRecruitItem {
             }
         }
         
-        // 先检测组合职业标识
+        // 先检测组合职业标识（处理连续写的职业）
         let combinedPatterns: [(patterns: [String], professions: [String])] = [
+            // 奶妈组合
             (["花秀", "秀花"], ["奶花", "奶秀"]),
             (["花秀歌", "秀花歌"], ["奶花", "奶秀", "奶歌"]),
-            (["秃苍"], ["和尚T", "苍T"])
+            (["奶药毒歌苍", "药毒歌苍"], ["奶药", "奶毒", "奶歌", "苍T"]),
+            (["奶药毒歌", "药毒歌"], ["奶药", "奶毒", "奶歌"]),
+            (["奶药毒", "药毒"], ["奶药", "奶毒"]),
+            (["药毒歌", "毒歌药"], ["奶药", "奶毒", "奶歌"]),
+            (["毒歌", "歌毒"], ["奶毒", "奶歌"]),
+            (["药歌", "歌药"], ["奶药", "奶歌"]),
+            (["药毒", "毒药"], ["奶药", "奶毒"]),
+            // 坦克组合
+            (["苍策t", "苍策T", "策苍t", "策苍T"], ["苍T", "策T"]),
+            (["秃苍"], ["和尚T", "苍T"]),
+            (["喵策"], ["喵T", "策T"])
         ]
         
         // 检测组合职业
@@ -442,11 +453,11 @@ extension TeamRecruitItem {
         
         // 职业标签配置（精确职业）
         let professionPatterns: [(label: String, color: Color, patterns: [String])] = [
-            ("奶歌", .cyan, ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶"]),
-            ("奶毒", .purple, ["奶毒", "毒奶"]),
-            ("奶秀", .red, ["奶秀", "秀奶"]),
-            ("奶花", .green, ["奶花", "花奶"]),
-            ("奶药", .yellow, ["奶药", "药奶", "药宗"]),
+            ("奶歌", .cyan, ["奶歌", "歌奶", "奶咕", "咕奶", "奶鸽", "鸽奶", "歌"]),
+            ("奶毒", .purple, ["奶毒", "毒奶", "毒"]),
+            ("奶秀", .red, ["奶秀", "秀奶", "秀"]),
+            ("奶花", .green, ["奶花", "花奶", "花"]),
+            ("奶药", .yellow, ["奶药", "药奶", "药宗", "药"]),
             ("策T", .orange, ["策t", "天策t", "铁牢", "喵策", "策"]),
             ("苍T", .gray, ["苍t", "苍云t", "王八t", "苍"]),
             ("和尚T", .brown, ["和尚t", "秃t", "大师t", "少林t", "秃", "和尚"]),
@@ -458,17 +469,47 @@ extension TeamRecruitItem {
             if !addedTags.contains(label) {
                 var found = false
                 for pattern in patterns {
-                    // 对于单字匹配（如"秃"、"苍"），需要更严格的上下文
+                    // 对于单字匹配（如"歌"、"毒"、"药"、"秃"、"苍"），需要更灵活的上下文判断
                     if pattern.count == 1 {
-                        // 单字需要配合其他关键词
-                        let contextPatterns = [
-                            "来\(pattern)", "缺\(pattern)", "求\(pattern)", "要\(pattern)",
-                            "\(pattern)t", "\(pattern)T", "来\(pattern)苍", "来秃\(pattern)"
-                        ]
-                        for contextPattern in contextPatterns {
-                            if content.contains(contextPattern.lowercased()) {
-                                found = true
-                                break
+                        // 奶妈类职业的单字（歌、毒、秀、花、药）
+                        if ["歌", "毒", "秀", "花", "药"].contains(pattern) {
+                            // 检查是否在奶妈职业上下文中
+                            let healerContexts = [
+                                "奶\(pattern)",     // 奶歌、奶毒等
+                                "\(pattern)奶",     // 歌奶、毒奶等
+                                "药\(pattern)",     // 药毒
+                                "\(pattern)歌",     // 毒歌
+                                "花\(pattern)",     // 花秀
+                                "\(pattern)花",     // 秀花
+                                "来\(pattern)",     // 来歌
+                                "缺\(pattern)",     // 缺毒
+                                "求\(pattern)"      // 求药
+                            ]
+                            for context in healerContexts {
+                                if content.contains(context) {
+                                    found = true
+                                    break
+                                }
+                            }
+                        }
+                        // 坦克类职业的单字（策、苍、秃）
+                        else if ["策", "苍", "秃", "喵"].contains(pattern) {
+                            let tankContexts = [
+                                "\(pattern)t",      // 策T、苍T
+                                "\(pattern)T",      // 策T、苍T（大写）
+                                "苍\(pattern)",     // 苍策
+                                "\(pattern)苍",     // 策苍
+                                "秃\(pattern)",     // 秃苍
+                                "\(pattern)秃",     // 苍秃
+                                "来\(pattern)",     // 来策
+                                "缺\(pattern)",     // 缺苍
+                                "求\(pattern)"      // 求秃
+                            ]
+                            for context in tankContexts {
+                                if content.contains(context.lowercased()) {
+                                    found = true
+                                    break
+                                }
                             }
                         }
                     } else {
