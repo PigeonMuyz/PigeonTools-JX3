@@ -12,9 +12,11 @@ struct WeeklyCdStatusCard: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @State private var teamCdData: TeamCdData?
     @State private var isLoading = false
+    @State private var isRefreshing = false  // 用于区分首次加载和刷新
     @State private var errorMessage: String?
     @State private var showingError = false
-    @State private var hasAutoLoaded = false
+    @State private var lastLoadedCharacter: GameCharacter?
+    @State private var lastRefreshTime: Date?
     
     init(refreshTrigger: Int = 0) {
         self.refreshTrigger = refreshTrigger
@@ -22,7 +24,8 @@ struct WeeklyCdStatusCard: View {
     
     var body: some View {
         Group {
-            if isLoading {
+            // 如果正在加载且没有数据，显示loading
+            if isLoading && teamCdData == nil {
                 HStack {
                     ProgressView()
                         .scaleEffect(0.8)
@@ -32,8 +35,21 @@ struct WeeklyCdStatusCard: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.vertical, 20)
-            } else if let teamCdData = teamCdData {
-                dungeonCdContent(teamCdData)
+            }
+            // 如果有数据，显示数据（可能带有刷新动画）
+            else if let teamCdData = teamCdData {
+                ZStack {
+                    dungeonCdContent(teamCdData)
+                        .opacity(isRefreshing ? 0.5 : 1.0)
+                    
+                    // 刷新时在数据上显示loading
+                    if isRefreshing {
+                        ProgressView()
+                            .scaleEffect(1.2)
+                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                    }
+                }
+                .animation(.easeInOut(duration: 0.3), value: isRefreshing)
             } else if dungeonManager.selectedCharacter == nil {
                 VStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.badge.questionmark")
@@ -73,27 +89,39 @@ struct WeeklyCdStatusCard: View {
             Text(errorMessage ?? "未知错误")
         }
         .onAppear {
-            if !hasAutoLoaded, let selectedCharacter = dungeonManager.selectedCharacter {
-                hasAutoLoaded = true
+            // 每次出现在屏幕上都尝试刷新
+            if let selectedCharacter = dungeonManager.selectedCharacter {
                 Task {
-                    await loadTeamCdData(for: selectedCharacter)
+                    await autoRefreshIfNeeded(for: selectedCharacter)
                 }
             }
         }
         .onChange(of: dungeonManager.selectedCharacter) { _, newCharacter in
             if let character = newCharacter {
+                // 切换角色时，如果是新角色则加载，否则刷新
                 Task {
-                    await loadTeamCdData(for: character)
+                    if lastLoadedCharacter?.id != character.id {
+                        // 新角色，清空数据并重新加载
+                        await MainActor.run {
+                            teamCdData = nil
+                        }
+                        await loadTeamCdData(for: character, isRefresh: false)
+                    } else {
+                        // 同一角色，刷新数据
+                        await loadTeamCdData(for: character, isRefresh: true)
+                    }
                 }
             } else {
                 teamCdData = nil
                 errorMessage = nil
+                lastLoadedCharacter = nil
             }
         }
         .onChange(of: refreshTrigger) { _, _ in
             if let selectedCharacter = dungeonManager.selectedCharacter {
                 Task {
-                    await loadTeamCdData(for: selectedCharacter)
+                    // 手动刷新时，如果有数据则显示刷新状态
+                    await loadTeamCdData(for: selectedCharacter, isRefresh: teamCdData != nil)
                 }
             }
         }
@@ -123,9 +151,15 @@ struct WeeklyCdStatusCard: View {
         }
     }
     
-    private func loadTeamCdData(for character: GameCharacter) async {
-        isLoading = true
-        errorMessage = nil
+    private func loadTeamCdData(for character: GameCharacter, isRefresh: Bool) async {
+        await MainActor.run {
+            if isRefresh {
+                isRefreshing = true
+            } else {
+                isLoading = true
+            }
+            errorMessage = nil
+        }
         
         do {
             let data = try await JX3APIService.shared.fetchTeamCdList(
@@ -134,16 +168,63 @@ struct WeeklyCdStatusCard: View {
             )
             
             await MainActor.run {
-                self.teamCdData = data
+                // 检查数据是否有变化
+                let hasChanges = !isDataEqual(old: self.teamCdData, new: data)
+                
+                if hasChanges || !isRefresh {
+                    withAnimation(.easeInOut(duration: 0.3)) {
+                        self.teamCdData = data
+                    }
+                }
+                
+                self.lastLoadedCharacter = character
+                self.lastRefreshTime = Date()
                 self.isLoading = false
+                self.isRefreshing = false
             }
         } catch {
             await MainActor.run {
                 self.errorMessage = error.localizedDescription
                 self.isLoading = false
-                self.showingError = true
+                self.isRefreshing = false
+                // 刷新失败时不显示错误弹窗，只在首次加载失败时显示
+                if !isRefresh {
+                    self.showingError = true
+                }
             }
         }
+    }
+    
+    // 自动刷新逻辑
+    private func autoRefreshIfNeeded(for character: GameCharacter) async {
+        // 如果角色变了，或者没有数据，或者距离上次刷新超过30秒，则刷新
+        let shouldRefresh = lastLoadedCharacter?.id != character.id ||
+                           teamCdData == nil ||
+                           (lastRefreshTime.map { Date().timeIntervalSince($0) > 30 } ?? true)
+        
+        if shouldRefresh {
+            let isRefresh = teamCdData != nil && lastLoadedCharacter?.id == character.id
+            await loadTeamCdData(for: character, isRefresh: isRefresh)
+        }
+    }
+    
+    // 比较两个TeamCdData是否相同
+    private func isDataEqual(old: TeamCdData?, new: TeamCdData) -> Bool {
+        guard let old = old else { return false }
+        
+        // 比较副本数量
+        if old.data.count != new.data.count { return false }
+        
+        // 比较每个副本的进度
+        for (oldDungeon, newDungeon) in zip(old.data, new.data) {
+            if oldDungeon.mapName != newDungeon.mapName ||
+               oldDungeon.bossFinished != newDungeon.bossFinished ||
+               oldDungeon.bossCount != newDungeon.bossCount {
+                return false
+            }
+        }
+        
+        return true
     }
 }
 
