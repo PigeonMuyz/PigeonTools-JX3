@@ -9,12 +9,21 @@ import Foundation
 
 // MARK: - 副本分类数据模型
 struct DungeonCategory: Identifiable, Codable, Hashable {
-    let id = UUID()
+    let id: UUID
     var name: String
     var order: Int // 排序顺序
     var isDefault: Bool = false // 是否为预设分类
     var color: String // 分类颜色
     var icon: String // 分类图标
+    
+    init(id: UUID = UUID(), name: String, order: Int, isDefault: Bool = false, color: String, icon: String) {
+        self.id = id
+        self.name = name
+        self.order = order
+        self.isDefault = isDefault
+        self.color = color
+        self.icon = icon
+    }
     
     // MARK: - Hashable & Equatable
     func hash(into hasher: inout Hasher) {

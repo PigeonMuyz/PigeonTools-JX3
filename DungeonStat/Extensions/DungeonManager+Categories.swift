@@ -156,7 +156,9 @@ extension DungeonManager {
         
         // 添加自定义分类
         for (categoryName, dungeons) in customCategoryDungeons.sorted(by: { $0.key < $1.key }) {
-            let customCategory = DungeonCategory(name: categoryName, order: 998, isDefault: false, color: "gray", icon: "folder.fill")
+            // 使用分类名称的哈希值创建一个稳定的UUID，确保同名分类的ID始终相同
+            let stableId = UUID(uuidString: "00000000-0000-0000-0000-" + String(format: "%012x", abs(categoryName.hashValue))) ?? UUID()
+            let customCategory = DungeonCategory(id: stableId, name: categoryName, order: 998, isDefault: false, color: "gray", icon: "folder.fill")
             result.append((category: customCategory, dungeons: dungeons))
         }
         
@@ -173,9 +175,12 @@ extension DungeonManager {
         withAnimation(.easeInOut(duration: 0.3)) {
             if collapsedCategories.contains(categoryId) {
                 collapsedCategories.remove(categoryId)
+                print("展开分类: \(categoryId)")
             } else {
                 collapsedCategories.insert(categoryId)
+                print("折叠分类: \(categoryId)")
             }
+            print("当前折叠的分类数: \(collapsedCategories.count)")
             saveCollapsedCategories()
         }
     }
@@ -194,6 +199,10 @@ extension DungeonManager {
     func loadCollapsedCategories() {
         if let categoryIds = UserDefaults.standard.stringArray(forKey: "CollapsedCategories") {
             collapsedCategories = Set(categoryIds.compactMap { UUID(uuidString: $0) })
+            print("加载折叠状态: \(categoryIds.count) 个分类被折叠")
+            print("折叠的分类ID: \(categoryIds)")
+        } else {
+            print("没有保存的折叠状态，默认全部展开")
         }
     }
     

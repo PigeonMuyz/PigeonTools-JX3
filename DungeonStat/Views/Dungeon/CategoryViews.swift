@@ -13,32 +13,30 @@ struct CategoryHeaderView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     
     var body: some View {
-        Button(action: {
+        HStack {
+            Image(systemName: "chevron.down")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .rotationEffect(.degrees(isCollapsed ? -90 : 0))
+                .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isCollapsed)
+            
+            if let category = category {
+                Text(category.name)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+            } else {
+                Text("未分类")
+                    .font(.headline)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+        }
+        .contentShape(Rectangle())  // 让整个区域都可以点击
+        .onTapGesture {
             let categoryId = category?.id ?? DungeonManager.uncategorizedId
             dungeonManager.toggleCategoryCollapse(categoryId)
-        }) {
-            HStack {
-                Image(systemName: "chevron.down")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                    .rotationEffect(.degrees(isCollapsed ? -90 : 0))
-                    .symbolEffect(.bounce, value: isCollapsed)
-                    .animation(.spring(response: 0.4, dampingFraction: 0.8), value: isCollapsed)
-                
-                if let category = category {
-                    Text(category.name)
-                        .font(.headline)
-                        .foregroundColor(.primary)
-                } else {
-                    Text("未分类")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                }
-                
-                Spacer()
-            }
         }
-        .buttonStyle(PlainButtonStyle())
     }
     
     private var isCollapsed: Bool {
