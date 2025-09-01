@@ -778,13 +778,39 @@ struct StatisticsView: View {
     }
 }
 
+// MARK: - 可折叠的Section Header
+struct CollapsibleSectionHeader: View {
+    let title: String
+    let sectionId: String
+    let isExpanded: Bool
+    let onToggle: () -> Void
+    
+    var body: some View {
+        Button(action: onToggle) {
+            HStack {
+                Text(title)
+                    .font(.headline)
+                    .foregroundColor(.primary)
+                Spacer()
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.caption)
+                    .foregroundColor(.gray)
+                    .animation(.easeInOut(duration: 0.2), value: isExpanded)
+            }
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
 // MARK: - 仪表盘页面（Dashboard）
 struct DashboardView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @AppStorage("showWelcomeBackRow") private var showWelcomeBackRow = true
+    @AppStorage("dashboardExpandedSections") private var expandedSectionsData = ""
     @State private var showingQuickStart = false
     @State private var showingCharacterSelector = false
     @State private var weeklyCdRefreshTrigger = 0
+    @State private var expandedSections: Set<String> = []
     
     private var currentTimeGreeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -825,15 +851,27 @@ struct DashboardView: View {
                 }
                 
                 // 周副本完成进度（圆形进度条）
-                Section {
-                    WeeklyProgressRow()
+                Section(header: CollapsibleSectionHeader(
+                    title: "周副本进度",
+                    sectionId: "weeklyProgress",
+                    isExpanded: expandedSections.contains("weeklyProgress"),
+                    onToggle: { toggleSection("weeklyProgress") }
+                )) {
+                    if expandedSections.contains("weeklyProgress") {
+                        WeeklyProgressRow()
+                    }
                 }
                 
                 // 本周副本状态
                 Section(header: HStack {
-                    Text("本周副本状态")
+                    CollapsibleSectionHeader(
+                        title: "本周副本状态",
+                        sectionId: "weeklyStatus",
+                        isExpanded: expandedSections.contains("weeklyStatus"),
+                        onToggle: { toggleSection("weeklyStatus") }
+                    )
                     Spacer()
-                    if dungeonManager.selectedCharacter != nil {
+                    if dungeonManager.selectedCharacter != nil && expandedSections.contains("weeklyStatus") {
                         Button(action: {
                             weeklyCdRefreshTrigger += 1
                         }) {
@@ -843,18 +881,34 @@ struct DashboardView: View {
                         }
                     }
                 }) {
-                    WeeklyCdStatusCard(refreshTrigger: weeklyCdRefreshTrigger)
+                    if expandedSections.contains("weeklyStatus") {
+                        WeeklyCdStatusCard(refreshTrigger: weeklyCdRefreshTrigger)
+                    }
                 }
                 
                 // 全局进行中任务
-                Section(header: Text("进行中的任务")) {
-                    AllInProgressTasksRows()
+                Section(header: CollapsibleSectionHeader(
+                    title: "进行中的任务",
+                    sectionId: "inProgressTasks",
+                    isExpanded: expandedSections.contains("inProgressTasks"),
+                    onToggle: { toggleSection("inProgressTasks") }
+                )) {
+                    if expandedSections.contains("inProgressTasks") {
+                        AllInProgressTasksRows()
+                    }
                 }
                 
                 // 角色分组显示
                 if !dungeonManager.characters.isEmpty {
-                    Section(header: Text("角色详情")) {
-                        CharacterBreakdownRows()
+                    Section(header: CollapsibleSectionHeader(
+                        title: "角色详情",
+                        sectionId: "characterDetails",
+                        isExpanded: expandedSections.contains("characterDetails"),
+                        onToggle: { toggleSection("characterDetails") }
+                    )) {
+                        if expandedSections.contains("characterDetails") {
+                            CharacterBreakdownRows()
+                        }
                     }
                 }
             }
@@ -883,8 +937,38 @@ struct DashboardView: View {
             }
             .onAppear {
                 // 初始化仪表盘
+                loadExpandedSections()
+            }
+            .onDisappear {
+                saveExpandedSections()
             }
         }
+    }
+    
+    // MARK: - Helper Methods
+    private func toggleSection(_ sectionId: String) {
+        withAnimation(.easeInOut(duration: 0.25)) {
+            if expandedSections.contains(sectionId) {
+                expandedSections.remove(sectionId)
+            } else {
+                expandedSections.insert(sectionId)
+            }
+        }
+    }
+    
+    private func loadExpandedSections() {
+        // 从存储的字符串中加载展开的部分
+        if !expandedSectionsData.isEmpty {
+            expandedSections = Set(expandedSectionsData.split(separator: ",").map(String.init))
+        } else {
+            // 默认展开的部分
+            expandedSections = ["weeklyProgress", "weeklyStatus", "characterDetails"]
+        }
+    }
+    
+    private func saveExpandedSections() {
+        // 保存展开的部分到字符串
+        expandedSectionsData = expandedSections.joined(separator: ",")
     }
 }
 

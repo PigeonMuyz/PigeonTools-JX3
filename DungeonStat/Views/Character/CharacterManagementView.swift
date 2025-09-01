@@ -334,14 +334,11 @@ struct CharacterManagementView: View {
     @State private var showingAddCharacter = false
     @State private var showingCharacterDetail = false
     @State private var showingAttributeComparison = false
-    @State private var showingAchievementComparison = false
     @State private var selectedCharacterForDetail: GameCharacter?
     @State private var selectedCharacterForEquipment: GameCharacter?
     @State private var selectedCharactersForComparison: Set<GameCharacter> = []
     @State private var characterDetailData: CharacterDetailData?
     @State private var isLoadingDetail = false
-    @State private var showingAchievementAnalyzer = false
-    @State private var selectedCharacterForAchievement: GameCharacter?
     @State private var showingCharacterCard = false
     @State private var selectedCharacterForCard: GameCharacter?
     
@@ -445,15 +442,6 @@ struct CharacterManagementView: View {
                             }
                             .tint(.red)
                             
-                            // 副本资历统计按钮
-                            Button {
-                                selectedCharacterForAchievement = gameCharacter
-//                                showingAchievementAnalyzer = true
-                            } label: {
-                                Image(systemName: "star.circle")
-                            }
-                            .tint(.purple)
-                            
                             // 查看详情按钮
                             Button {
                                 selectedCharacterForDetail = gameCharacter
@@ -474,11 +462,6 @@ struct CharacterManagementView: View {
                                 Image(systemName: "person.crop.rectangle")
                             }
                             .tint(.green)
-                        }
-                    }
-                    .onChange(of: selectedCharacterForAchievement) {
-                        if selectedCharacterForAchievement != nil {
-                            showingAchievementAnalyzer = true
                         }
                     }
                     .onChange(of: selectedCharacterForCard) {
@@ -525,16 +508,6 @@ struct CharacterManagementView: View {
                             .clipShape(Capsule())
                             .disabled(selectedCharactersForComparison.count < 2)
                             
-                            Button("成就比较") {
-                                showingAchievementComparison = true
-                            }
-                            .font(.caption)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
-                            .background(Color.purple)
-                            .clipShape(Capsule())
-                            .disabled(selectedCharactersForComparison.count < 2)
                         }
                     } else {
                         // 显示对比模式说明
@@ -627,16 +600,6 @@ struct CharacterManagementView: View {
         }
         .sheet(isPresented: $showingAttributeComparison) {
             AttributeComparisonSheet(characters: Array(selectedCharactersForComparison))
-        }
-        .sheet(isPresented: $showingAchievementComparison) {
-            AchievementComparisonSheet(characters: Array(selectedCharactersForComparison))
-        }
-        .sheet(isPresented: $showingAchievementAnalyzer, onDismiss: {
-            selectedCharacterForAchievement = nil
-        }) {
-            if let character = selectedCharacterForAchievement {
-                AchievementAnalyzerView(character: character)
-            }
         }
         .sheet(isPresented: $showingCharacterCard, onDismiss: {
             selectedCharacterForCard = nil
@@ -978,26 +941,27 @@ struct CharacterInfoCard: View {
 struct EquipmentGrid: View {
     let equipments: [Equipment]
     
-    private let columns = Array(repeating: GridItem(.flexible(), spacing: 8), count: 3)
-    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("装备")
                 .font(.headline)
                 .fontWeight(.semibold)
             
-            LazyVGrid(columns: columns, spacing: 8) {
+            VStack(spacing: 1) {
                 ForEach(equipments) { equipment in
-                    EquipmentCard(equipment: equipment)
+                    EquipmentRowCard(equipment: equipment)
                 }
             }
+            .background(Color(.secondarySystemBackground))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
         }
     }
 }
 
-// MARK: - 装备卡片
-struct EquipmentCard: View {
+// MARK: - 装备行卡片（新的列表式布局）
+struct EquipmentRowCard: View {
     let equipment: Equipment
+    @State private var showingDetail = false
     
     private var qualityColor: Color {
         switch equipment.color {
@@ -1007,6 +971,234 @@ struct EquipmentCard: View {
         case "4": return .purple
         case "5": return .orange
         default: return .gray
+        }
+    }
+    
+    private var qualityName: String {
+        switch equipment.color {
+        case "1": return "普通"
+        case "2": return "精良"
+        case "3": return "稀有"
+        case "4": return "史诗"
+        case "5": return "传说"
+        default: return "未知"
+        }
+    }
+    
+    // 提取关键属性
+    private func extractKeyAttributes(from stones: [FiveStone]) -> String {
+        let attributeMap: [String: String] = [
+            "根骨": "根骨", "元气": "元气", "身法": "身法", "力道": "力道", "体质": "体质",
+            "无双": "无双", "内功攻击": "内攻", "外功攻击": "外攻", "破防": "破防",
+            "加速": "加速", "破招": "破招", "治疗": "治疗", "会心": "会心", "会心效果": "会效"
+        ]
+        
+        var attributes: [String] = []
+        for stone in stones {
+            for (key, shortName) in attributeMap {
+                if stone.desc.contains(key) {
+                    // 提取数值
+                    if let match = stone.desc.range(of: "\\d+", options: .regularExpression) {
+                        let value = String(stone.desc[match])
+                        attributes.append("\(shortName)+\(value)")
+                        break
+                    }
+                }
+            }
+        }
+        return attributes.joined(separator: " ")
+    }
+    
+    var body: some View {
+        HStack(spacing: 10) {
+            // 装备图标
+            AsyncImage(url: URL(string: equipment.icon)) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.gray.opacity(0.3))
+                    .overlay(
+                        Image(systemName: "square.fill")
+                            .foregroundColor(.gray)
+                            .font(.caption)
+                    )
+            }
+            .frame(width: 36, height: 36)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(qualityColor, lineWidth: 1)
+            )
+            
+            // 装备信息
+            VStack(alignment: .leading, spacing: 3) {
+                // 第一行：名称、品级
+                HStack(spacing: 6) {
+                    Text(equipment.name)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(qualityColor)
+                        .lineLimit(1)
+                    
+                    Text("(\(equipment.quality))")
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
+                    
+                    Spacer()
+                }
+                
+                // 第二行：五行石图标和属性
+                if let fiveStones = equipment.fiveStone, !fiveStones.isEmpty {
+                    HStack(spacing: 3) {
+                        // 五行石图标
+                        ForEach(fiveStones.prefix(6), id: \.name) { stone in
+                            AsyncImage(url: URL(string: stone.icon)) { image in
+                                image
+                                    .resizable()
+                                    .aspectRatio(contentMode: .fit)
+                            } placeholder: {
+                                Image(systemName: "hexagon.fill")
+                                    .foregroundColor(.cyan)
+                            }
+                            .frame(width: 16, height: 16)
+                        }
+                        
+                        // 提取的属性
+                        Text(extractKeyAttributes(from: fiveStones))
+                            .font(.system(size: 9))
+                            .foregroundColor(.cyan)
+                            .lineLimit(1)
+                        
+                        Spacer()
+                    }
+                }
+                
+                // 第三行：来源和五彩石
+                HStack(spacing: 4) {
+                    // 来源
+                    if let source = equipment.source {
+                        HStack(spacing: 2) {
+                            Image(systemName: "location.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(.secondary)
+                            Text(source)
+                                .font(.system(size: 9))
+                                .foregroundColor(.secondary)
+                                .lineLimit(1)
+                        }
+                    }
+                    
+                    // 五彩石
+                    if let colorStone = equipment.colorStone {
+                        HStack(spacing: 2) {
+                            Image(systemName: "diamond.fill")
+                                .font(.system(size: 8))
+                                .foregroundColor(.orange)
+                            Text(colorStone.name)
+                                .font(.system(size: 9))
+                                .foregroundColor(.orange)
+                                .lineLimit(1)
+                        }
+                    }
+                    
+                    Spacer()
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            
+            // 右侧信息：精炼和附魔
+            VStack(alignment: .trailing, spacing: 4) {
+                // 精炼等级（星星显示）
+                if let level = Int(equipment.strengthLevel), level > 0 {
+                    HStack(spacing: 1) {
+                        ForEach(0..<min(level, 8), id: \.self) { _ in
+                            Image(systemName: "star.fill")
+                                .font(.system(size: 7))
+                                .foregroundColor(.yellow)
+                        }
+                    }
+                }
+                
+                // 小附魔
+                if let enchants = equipment.permanentEnchant, !enchants.isEmpty {
+                    Text(enchants.first?.name ?? "")
+                        .font(.system(size: 8))
+                        .foregroundColor(.blue)
+                        .lineLimit(1)
+                }
+                
+                // 大附魔
+                if let commonEnchant = equipment.commonEnchant {
+                    Text(commonEnchant.name)
+                        .font(.system(size: 8))
+                        .foregroundColor(.purple)
+                        .lineLimit(1)
+                }
+            }
+            
+            // 右侧箭头
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(Color(.systemBackground))
+        .contentShape(Rectangle())
+        .onTapGesture {
+            showingDetail = true
+        }
+        .sheet(isPresented: $showingDetail) {
+            EquipmentDetailView(equipment: equipment, qualityColor: qualityColor, qualityName: qualityName)
+        }
+    }
+}
+
+// MARK: - 装备标签视图
+struct EquipTagView: View {
+    let text: String
+    let color: Color
+    let fontSize: CGFloat
+    
+    var body: some View {
+        Text(text)
+            .font(.system(size: fontSize))
+            .foregroundColor(color)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 3)
+                    .fill(color.opacity(0.15))
+            )
+            .lineLimit(1)
+    }
+}
+
+// MARK: - 装备卡片（原来的网格布局，保留以供其他地方使用）
+struct EquipmentCard: View {
+    let equipment: Equipment
+    @State private var showingDetail = false
+    
+    private var qualityColor: Color {
+        switch equipment.color {
+        case "1": return .gray
+        case "2": return .green
+        case "3": return .blue
+        case "4": return .purple
+        case "5": return .orange
+        default: return .gray
+        }
+    }
+    
+    private var qualityName: String {
+        switch equipment.color {
+        case "1": return "普通"
+        case "2": return "精良"
+        case "3": return "稀有"
+        case "4": return "史诗"
+        case "5": return "传说"
+        default: return "未知"
         }
     }
     
@@ -1041,6 +1233,12 @@ struct EquipmentCard: View {
                 .stroke(qualityColor, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: 8))
+        .onTapGesture {
+            showingDetail = true
+        }
+        .sheet(isPresented: $showingDetail) {
+            EquipmentDetailView(equipment: equipment, qualityColor: qualityColor, qualityName: qualityName)
+        }
     }
 }
 
@@ -1048,57 +1246,80 @@ struct EquipmentCard: View {
 struct AttributePanel: View {
     let panelList: PanelList
     
+    // 格式化显示值
+    private func formatValue(_ attr: PanelAttribute) -> String {
+        if attr.percent {
+            return String(format: "%.1f%%", attr.value)
+        } else {
+            let value = Int(attr.value)
+            // 小于10000的数字直接显示
+            if value < 10000 {
+                return String(value)
+            }
+            // 大于等于10000的数字显示为万
+            let wan = Double(value) / 10000.0
+            if wan == floor(wan) {
+                return String(format: "%.0f万", wan)
+            } else {
+                return String(format: "%.1f万", wan)
+            }
+        }
+    }
+    
+    private let columns = [
+        GridItem(.flexible()),
+        GridItem(.flexible())
+    ]
+    
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("属性")
-                .font(.headline)
-                .fontWeight(.semibold)
-            
-            VStack(spacing: 1) {
-                ForEach(panelList.panel) { attribute in
-                    AttributeRow(attribute: attribute)
-                }
+            HStack {
+                Text("属性面板")
+                    .font(.headline)
+                    .fontWeight(.semibold)
+                
+                Spacer()
+                
+                Text("装分 \(panelList.score)")
+                    .font(.subheadline)
+                    .fontWeight(.bold)
+                    .foregroundColor(.orange)
             }
-            .background(Color(.systemBackground))
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            
+            // 单一卡片显示所有属性
+            VStack(spacing: 0) {
+                LazyVGrid(columns: columns, spacing: 12) {
+                    ForEach(panelList.panel) { attr in
+                        HStack {
+                            Text(attr.name)
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            
+                            Text(formatValue(attr))
+                                .font(.caption)
+                                .fontWeight(.medium)
+                                .foregroundColor(.primary)
+                        }
+                    }
+                }
+                .padding(12)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(.secondarySystemBackground))
+            )
         }
     }
 }
 
-// MARK: - 属性行
-struct AttributeRow: View {
-    let attribute: PanelAttribute
-    
-    var body: some View {
-        HStack {
-            Text(attribute.name)
-                .font(.body)
-                .foregroundColor(.primary)
-            
-            Spacer()
-            
-            if attribute.percent {
-                Text(String(format: "%.2f%%", attribute.value))
-                    .font(.body)
-                    .foregroundColor(.secondary)
-            } else {
-                Text(String(format: "%.0f", attribute.value))
-                    .font(.body)
-                    .foregroundColor(.secondary)
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(.systemBackground))
-    }
-}
 
 // MARK: - 奇穴部分
 struct QixueSection: View {
     let qixueList: [Qixue]
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("奇穴")
                 .font(.headline)
                 .fontWeight(.semibold)
@@ -1106,721 +1327,454 @@ struct QixueSection: View {
             ScrollView(.horizontal, showsIndicators: false) {
                 HStack(spacing: 12) {
                     ForEach(qixueList) { qixue in
-                        QixueCard(qixue: qixue)
+                        CompactQixueCard(qixue: qixue)
                     }
                 }
-                .padding(.horizontal)
+                .padding(.horizontal, 2)
             }
+            .frame(height: 75)
         }
     }
 }
 
-// MARK: - 奇穴卡片
-struct QixueCard: View {
+// MARK: - 紧凑奇穴卡片
+struct CompactQixueCard: View {
     let qixue: Qixue
+    @State private var showingDetail = false
     
     var body: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 4) {
             AsyncImage(url: URL(string: qixue.icon)) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(Color.gray.opacity(0.3))
+                    .overlay(
+                        Image(systemName: "star.fill")
+                            .foregroundColor(.gray)
+                            .font(.caption)
+                    )
+            }
+            .frame(width: 42, height: 42)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.systemBackground))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+                    )
+            )
+            
+            Text(qixue.name)
+                .font(.caption2)
+                .fontWeight(.medium)
+                .lineLimit(1)
+                .frame(width: 50)
+        }
+        .onTapGesture {
+            showingDetail = true
+        }
+        .popover(isPresented: $showingDetail) {
+            VStack(spacing: 12) {
+                AsyncImage(url: URL(string: qixue.icon)) { image in
+                    image
+                        .resizable()
+                        .aspectRatio(contentMode: .fit)
+                } placeholder: {
+                    ProgressView()
+                }
+                .frame(width: 60, height: 60)
+                
+                Text(qixue.name)
+                    .font(.headline)
+                    .multilineTextAlignment(.center)
+                
+                if !qixue.desc.isEmpty {
+                    Text(qixue.desc)
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.leading)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .padding()
+            .frame(maxWidth: 300)
+            .presentationCompactAdaptation(.popover)
+        }
+    }
+}
+// MARK: - 装备详情视图
+struct EquipmentDetailView: View {
+    let equipment: Equipment
+    let qualityColor: Color
+    let qualityName: String
+    @Environment(\.dismiss) private var dismiss
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack(spacing: 16) {
+                    equipmentHeader
+                    basicInfoSection
+                    fiveStoneSection
+                    colorStoneSection
+                    permanentEnchantSection
+                    commonEnchantSection
+                    sourceSection
+                }
+                .padding()
+            }
+            .navigationTitle("装备详情")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button("关闭") {
+                        dismiss()
+                    }
+                }
+            }
+        }
+    }
+    
+    // MARK: - 子视图
+    private var equipmentHeader: some View {
+        VStack(spacing: 8) {
+            AsyncImage(url: URL(string: equipment.icon)) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.3))
+                    .overlay(
+                        ProgressView()
+                    )
+            }
+            .frame(width: 80, height: 80)
+            .background(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(qualityColor, lineWidth: 2)
+            )
+            
+            Text(equipment.name)
+                .font(.title3)
+                .fontWeight(.bold)
+                .foregroundColor(qualityColor)
+                .multilineTextAlignment(.center)
+            
+            Text("品级: \(equipment.quality)")
+                .font(.caption)
+                .foregroundColor(.secondary)
+        }
+    }
+    
+    private var basicInfoSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("装备位置")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text(equipment.desc)
+                    .font(.caption)
+                    .fontWeight(.medium)
+                    .lineLimit(1)
+            }
+            
+            HStack {
+                Text("装备类型")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                Text("\(equipment.kind) - \(equipment.subKind)")
+                    .font(.caption)
+                    .fontWeight(.medium)
+            }
+            
+            HStack {
+                Text("品质")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                Spacer()
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(qualityColor)
+                        .frame(width: 8, height: 8)
+                    Text("品级 \(equipment.quality)")
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundColor(qualityColor)
+                }
+            }
+            
+            if !equipment.`class`.isEmpty {
+                HStack {
+                    Text("装备分类")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    Text(equipment.`class`)
+                        .font(.caption)
+                        .fontWeight(.medium)
+                }
+            }
+            
+            if let strengthLevel = Int(equipment.strengthLevel),
+               let maxStrengthLevel = Int(equipment.maxStrengthLevel),
+               maxStrengthLevel > 0 {
+                HStack {
+                    Text("精炼等级")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Spacer()
+                    HStack(spacing: 2) {
+                        ForEach(0..<min(maxStrengthLevel, 8), id: \.self) { index in
+                            Image(systemName: index < strengthLevel ? "diamond.fill" : "diamond")
+                                .font(.caption2)
+                                .foregroundColor(index < strengthLevel ? .yellow : .gray)
+                        }
+                        Text("\(strengthLevel)/\(maxStrengthLevel)")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                            .padding(.leading, 4)
+                    }
+                }
+            }
+        }
+        .padding(12)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(Color(.tertiarySystemBackground))
+        )
+    }
+    
+    @ViewBuilder
+    private var fiveStoneSection: some View {
+        if let fiveStones = equipment.fiveStone, !fiveStones.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("五行石")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                
+                ForEach(fiveStones) { stone in
+                    FiveStoneRow(stone: stone)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(.tertiarySystemBackground))
+            )
+        }
+    }
+    
+    @ViewBuilder
+    private var colorStoneSection: some View {
+        if let colorStone = equipment.colorStone {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("五彩石")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                
+                ColorStoneView(colorStone: colorStone)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(.tertiarySystemBackground))
+            )
+        }
+    }
+    
+    @ViewBuilder
+    private var permanentEnchantSection: some View {
+        if let permanentEnchants = equipment.permanentEnchant, !permanentEnchants.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("小附魔")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                
+                ForEach(permanentEnchants) { enchant in
+                    EnchantView(enchant: enchant)
+                }
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(.tertiarySystemBackground))
+            )
+        }
+    }
+    
+    @ViewBuilder
+    private var commonEnchantSection: some View {
+        if let commonEnchant = equipment.commonEnchant {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("大附魔")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                
+                CommonEnchantView(enchant: commonEnchant)
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(.tertiarySystemBackground))
+            )
+        }
+    }
+    
+    @ViewBuilder
+    private var sourceSection: some View {
+        if let source = equipment.source, !source.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("获取途径")
+                    .font(.caption)
+                    .fontWeight(.semibold)
+                
+                Text(source)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .background(
+                        RoundedRectangle(cornerRadius: 6)
+                            .fill(Color(.quaternarySystemFill))
+                    )
+            }
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(.tertiarySystemBackground))
+            )
+        }
+    }
+}
+
+// MARK: - 五行石行视图
+struct FiveStoneRow: View {
+    let stone: FiveStone
+    
+    var body: some View {
+        HStack(spacing: 8) {
+            AsyncImage(url: URL(string: stone.icon)) { image in
                 image
                     .resizable()
                     .aspectRatio(contentMode: .fit)
             } placeholder: {
                 RoundedRectangle(cornerRadius: 4)
                     .fill(Color.gray.opacity(0.3))
-                    .overlay(
-                        Image(systemName: "star.fill")
-                            .foregroundColor(.gray)
-                    )
             }
-            .frame(width: 40, height: 40)
+            .frame(width: 24, height: 24)
             
-            Text(qixue.name)
-                .font(.caption2)
-                .fontWeight(.medium)
-                .multilineTextAlignment(.center)
-                .lineLimit(2)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(stone.name)
+                    .font(.caption2)
+                    .fontWeight(.medium)
+                Text(stone.desc)
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+            }
+            Spacer()
         }
         .padding(8)
-        .frame(width: 80)
-        .background(Color(.systemBackground))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.blue.opacity(0.3), lineWidth: 1)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(.quaternarySystemFill))
         )
     }
 }
 
-// MARK: - 成就比较Sheet
-struct AchievementComparisonSheet: View {
-    let characters: [GameCharacter]
-    @Environment(\.dismiss) private var dismiss
-    @State private var isLoading = false
-    @State private var commonIncompleteAchievements: [ProcessedAchievement] = []
-    @State private var characterAchievementData: [GameCharacter: AchievementData] = [:]
-    @State private var processedAchievementData: ProcessedAchievementData?
-    @State private var validationResults: [GameCharacter: ValidationResult] = [:]
-    @State private var errorMessage: String?
-    @State private var filterOption = FilterOption.all
-    @State private var sortOption = SortOption.completion
-    @State private var searchText = ""
-    
-    enum FilterOption: String, CaseIterable {
-        case all = "全部"
-        case highPriority = "高优先级"
-        case mediumPriority = "中优先级"
-        case lowPriority = "低优先级"
-        case unstarted = "未开始"
-        case lowCompletion = "低完成度"
-    }
-    
-    enum SortOption: String, CaseIterable {
-        case completion = "完成度"
-        case dungeonName = "副本名称"
-        case priority = "优先级"
-    }
-    
-    private var filteredAndSortedAchievements: [DungeonAchievementData] {
-        var filtered = commonIncompleteAchievements.map { achievement in
-            createDungeonAchievementData(from: achievement)
-        }
-        
-        // 应用筛选
-        switch filterOption {
-        case .all:
-            break
-        case .highPriority:
-            filtered = filtered.filter { $0.priority == .high }
-        case .mediumPriority:
-            filtered = filtered.filter { $0.priority == .medium }
-        case .lowPriority:
-            filtered = filtered.filter { $0.priority == .low }
-        case .unstarted:
-            filtered = filtered.filter { $0.completionRate == 0 }
-        case .lowCompletion:
-            filtered = filtered.filter { $0.completionRate < 30 }
-        }
-        
-        // 应用搜索
-        if !searchText.isEmpty {
-            filtered = filtered.filter { achievement in
-                achievement.dungeonName.localizedCaseInsensitiveContains(searchText) ||
-                achievement.difficulty.localizedCaseInsensitiveContains(searchText) ||
-                achievement.achievements.contains { $0.name.localizedCaseInsensitiveContains(searchText) }
-            }
-        }
-        
-        // 应用排序
-        switch sortOption {
-        case .completion:
-            filtered.sort { $0.completionRate < $1.completionRate }
-        case .dungeonName:
-            filtered.sort { $0.dungeonName < $1.dungeonName }
-        case .priority:
-            filtered.sort { $0.priority.sortOrder < $1.priority.sortOrder }
-        }
-        
-        return filtered
-    }
+// MARK: - 五彩石视图
+struct ColorStoneView: View {
+    let colorStone: ColorStone
     
     var body: some View {
-        NavigationView {
-            VStack {
-                if isLoading {
-                    loadingView
-                } else if let errorMessage = errorMessage {
-                    errorView(message: errorMessage)
-                } else if commonIncompleteAchievements.isEmpty {
-                    emptyView
-                } else {
-                    contentView
-                }
+        HStack(spacing: 8) {
+            AsyncImage(url: URL(string: colorStone.icon)) { image in
+                image
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } placeholder: {
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(Color.gray.opacity(0.3))
             }
-            .navigationTitle("成就比较")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button("关闭") {
-                        dismiss()
-                    }
-                }
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button("刷新") {
-                        loadAchievementComparison()
-                    }
-                    .disabled(isLoading)
-                }
-            }
-            .onAppear {
-                loadAchievementComparison()
-            }
-        }
-        .searchable(text: $searchText, prompt: "搜索副本、难度或成就名称")
-    }
-    
-    private var loadingView: some View {
-        VStack(spacing: 20) {
-            ProgressView()
-                .scaleEffect(1.5)
-            Text("正在分析角色成就数据...")
-                .font(.headline)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-    
-    private func errorView(message: String) -> some View {
-        VStack(spacing: 20) {
-            Image(systemName: "exclamationmark.triangle")
-                .font(.system(size: 50))
-                .foregroundColor(.orange)
+            .frame(width: 30, height: 30)
             
-            Text("加载失败")
-                .font(.headline)
-            
-            Text(message)
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-            
-            Button("重试") {
-                loadAchievementComparison()
-            }
-            .buttonStyle(.borderedProminent)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-    
-    private var emptyView: some View {
-        VStack(spacing: 20) {
-            Image(systemName: "checkmark.circle.fill")
-                .font(.system(size: 50))
-                .foregroundColor(.green)
-            
-            Text("太棒了！")
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.green)
-            
-            Text("这些角色没有共同的未完成或低完成度成就")
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-    }
-    
-    private var contentView: some View {
-        VStack(spacing: 0) {
-            // 筛选和排序控件
-            filtersView
-            
-            // 统计概览
-            statsOverview
-            
-            Divider()
-            
-            // 成就列表
-            ScrollView {
-                LazyVStack(spacing: 12) {
-                    ForEach(filteredAndSortedAchievements) { achievement in
-                        CommonAchievementCard(
-                            achievement: achievement,
-                            characters: characters,
-                            characterAchievementData: characterAchievementData
-                        )
-                    }
-                }
-                .padding()
-            }
-        }
-    }
-    
-    private var filtersView: some View {
-        VStack(spacing: 12) {
-            HStack {
-                Text("筛选:")
+            VStack(alignment: .leading, spacing: 2) {
+                Text(colorStone.name)
                     .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Picker("筛选", selection: $filterOption) {
-                    ForEach(FilterOption.allCases, id: \.self) { option in
-                        Text(option.rawValue).tag(option)
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-            }
-            
-            HStack {
-                Text("排序:")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                
-                Picker("排序", selection: $sortOption) {
-                    ForEach(SortOption.allCases, id: \.self) { option in
-                        Text(option.rawValue).tag(option)
-                    }
-                }
-                .pickerStyle(SegmentedPickerStyle())
-            }
-        }
-        .padding()
-        .background(Color(.systemGray6))
-    }
-    
-    private var statsOverview: some View {
-        HStack(spacing: 16) {
-            AchievementStatItem(
-                title: "共同未完成",
-                value: "\(filteredAndSortedAchievements.count)",
-                subtitle: "个成就",
-                color: .orange
-            )
-            
-            Divider()
-                .frame(height: 40)
-            
-            AchievementStatItem(
-                title: "涉及副本",
-                value: "\(Set(filteredAndSortedAchievements.map { $0.dungeonName }).count)",
-                subtitle: "个",
-                color: .green
-            )
-            
-            Divider()
-                .frame(height: 40)
-            
-            AchievementStatItem(
-                title: "参与角色",
-                value: "\(characters.count)",
-                subtitle: "个",
-                color: .blue
-            )
-        }
-        .padding()
-        .background(Color(.systemGray6))
-    }
-    
-    private func loadAchievementComparison() {
-        isLoading = true
-        errorMessage = nil
-        characterAchievementData.removeAll()
-        validationResults.removeAll()
-        
-        let group = DispatchGroup()
-        var errors: [Error] = []
-        
-        // 首先获取成就数据进行校验（优先使用缓存）
-        group.enter()
-        Task {
-            do {
-                let data: ProcessedAchievementData
-                
-                // 优先使用缓存
-                if let cachedData = AchievementDataService.shared.getCachedAchievementData() {
-                    print("✅ 成就对比使用JX3Box缓存数据")
-                    data = cachedData
-                } else {
-                    print("🌐 成就对比从网络获取JX3Box数据")
-                    data = try await AchievementDataService.shared.fetchAndProcessAchievementData()
-                }
-                
-                await MainActor.run {
-                    self.processedAchievementData = data
-                    group.leave()
-                }
-            } catch {
-                await MainActor.run {
-                    errors.append(error)
-                    group.leave()
-                }
-            }
-        }
-        
-        // 加载每个角色的成就数据
-        for character in characters {
-            group.enter()
-            loadCharacterAchievementData(for: character) { result in
-                switch result {
-                case .success(let achievementData):
-                    self.characterAchievementData[character] = achievementData
-                case .failure(let error):
-                    errors.append(error)
-                }
-                group.leave()
-            }
-        }
-        
-        group.notify(queue: .main) {
-            self.isLoading = false
-            
-            if !errors.isEmpty {
-                self.errorMessage = "部分数据加载失败：\(errors.first?.localizedDescription ?? "未知错误")"
-            } else if let processedData = self.processedAchievementData {
-                self.processAchievementComparison(with: processedData)
-            } else {
-                self.errorMessage = "无法获取成就数据"
-            }
-        }
-    }
-    
-    private func loadCharacterAchievementData(for character: GameCharacter, completion: @escaping (Result<AchievementData, Error>) -> Void) {
-        // 首先尝试从缓存加载
-        if let cachedData = AchievementCacheService.shared.loadCache(for: character.server, name: character.name) {
-            completion(.success(cachedData))
-            return
-        }
-        
-        // 如果没有缓存，从网络加载
-        Task {
-            do {
-                let data = try await JX3APIService.shared.fetchAchievementData(
-                    server: character.server,
-                    name: character.name
-                )
-                
-                // 保存到缓存
-                AchievementCacheService.shared.saveCache(
-                    data: data,
-                    for: character.server,
-                    name: character.name
-                )
-                
-                completion(.success(data))
-            } catch {
-                completion(.failure(error))
-            }
-        }
-    }
-    
-    private func processAchievementComparison(with processedData: ProcessedAchievementData) {
-        var commonAchievements: [ProcessedAchievement] = []
-        
-        // 对每个角色的成就数据进行校验
-        for (character, achievementData) in characterAchievementData {
-            let validationResult = AchievementDataService.shared.validateAchievementData(achievementData, with: processedData)
-            validationResults[character] = validationResult
-        }
-        
-        // 找出所有角色都存在且都没有完成或完成度很低的成就
-        let allDungeonAchievements = Set(validationResults.values.flatMap { result in
-            result.validatedDungeons.flatMap { (dungeonName, difficulties) in
-                difficulties.flatMap { (difficulty, stats) in
-                    stats.achievements.map { achievement in
-                        "\(dungeonName)_\(difficulty)_\(achievement.id)"
-                    }
-                }
-            }
-        })
-        
-        for achievementKey in allDungeonAchievements {
-            let components = achievementKey.split(separator: "_")
-            guard components.count >= 3,
-                  let achievementId = Int(components[2]) else { continue }
-            
-            let dungeonName = String(components[0])
-            let difficulty = String(components[1])
-            
-            // 检查这个成就是否在所有角色中都未完成或完成度很低
-            var isCommonIncomplete = true
-            var achievement: ProcessedAchievement?
-            
-            for (character, validationResult) in validationResults {
-                guard let dungeonStats = validationResult.validatedDungeons[dungeonName]?[difficulty],
-                      let achv = dungeonStats.achievements.first(where: { $0.id == achievementId }) else {
-                    isCommonIncomplete = false
-                    break
-                }
-                
-                if achievement == nil {
-                    achievement = achv
-                }
-                
-                // 检查完成度
-                let completionRate = dungeonStats.calibrated.pieces.total > 0 
-                    ? Double(dungeonStats.calibrated.pieces.speed) / Double(dungeonStats.calibrated.pieces.total) * 100 
-                    : 0
-                
-                // 如果这个角色在这个副本的完成度超过80%，则不算共同未完成
-                if completionRate >= 80.0 {
-                    isCommonIncomplete = false
-                    break
-                }
-                
-                // 检查用户是否已手动标记为完成
-                if AchievementCompletionService.shared.isAchievementCompleted(achievementId) {
-                    isCommonIncomplete = false
-                    break
-                }
-            }
-            
-            if isCommonIncomplete, let achievement = achievement {
-                commonAchievements.append(achievement)
-            }
-        }
-        
-        // 去重并排序
-        let uniqueAchievements = Array(Set(commonAchievements))
-        self.commonIncompleteAchievements = uniqueAchievements.sorted { $0.name < $1.name }
-    }
-    
-    private func createDungeonAchievementData(from achievement: ProcessedAchievement) -> DungeonAchievementData {
-        // 从第一个角色的数据中获取副本信息
-        guard let firstCharacter = characters.first,
-              let validationResult = validationResults[firstCharacter] else {
-            return DungeonAchievementData(
-                dungeonName: achievement.sceneName ?? "未知副本",
-                difficulty: achievement.layerName ?? "未知难度",
-                originalStats: DungeonStats(seniority: SeniorityInfo(total: 0, speed: 0), pieces: PiecesInfo(total: 0, speed: 0)),
-                calibratedStats: DungeonStats(seniority: SeniorityInfo(total: 0, speed: 0), pieces: PiecesInfo(total: 0, speed: 0)),
-                isCalibrated: false,
-                achievements: [achievement],
-                completionRate: 0,
-                potential: 0,
-                priority: .low
-            )
-        }
-        
-        // 查找包含此成就的副本和难度
-        for (dungeonName, difficulties) in validationResult.validatedDungeons {
-            for (difficulty, stats) in difficulties {
-                if stats.achievements.contains(where: { $0.id == achievement.id }) {
-                    let completionRate = stats.calibrated.pieces.total > 0 
-                        ? Double(stats.calibrated.pieces.speed) / Double(stats.calibrated.pieces.total) * 100 
-                        : 0
-                    
-                    let potential = stats.calibrated.seniority.total - stats.calibrated.seniority.speed
-                    
-                    let priority: DungeonAchievementData.Priority
-                    if stats.calibrated.pieces.speed == 0 {
-                        priority = .high
-                    } else if completionRate < 30 {
-                        priority = .high
-                    } else if completionRate < 60 {
-                        priority = .medium
-                    } else {
-                        priority = .low
-                    }
-                    
-                    return DungeonAchievementData(
-                        dungeonName: dungeonName,
-                        difficulty: difficulty,
-                        originalStats: stats.original,
-                        calibratedStats: stats.calibrated,
-                        isCalibrated: stats.isCalibrated,
-                        achievements: stats.achievements,
-                        completionRate: completionRate,
-                        potential: potential,
-                        priority: priority
-                    )
-                }
-            }
-        }
-        
-        // 如果没有找到，返回默认数据
-        return DungeonAchievementData(
-            dungeonName: achievement.sceneName ?? "未知副本",
-            difficulty: achievement.layerName ?? "未知难度",
-            originalStats: DungeonStats(seniority: SeniorityInfo(total: 0, speed: 0), pieces: PiecesInfo(total: 0, speed: 0)),
-            calibratedStats: DungeonStats(seniority: SeniorityInfo(total: 0, speed: 0), pieces: PiecesInfo(total: 0, speed: 0)),
-            isCalibrated: false,
-            achievements: [achievement],
-            completionRate: 0,
-            potential: 0,
-            priority: .low
-        )
-    }
-}
-
-// MARK: - 共同成就卡片
-struct CommonAchievementCard: View {
-    let achievement: DungeonAchievementData
-    let characters: [GameCharacter]
-    let characterAchievementData: [GameCharacter: AchievementData]
-    @State private var showingAchievementDetail = false
-    
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            // 头部信息
-            HStack {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(achievement.dungeonName)
-                        .font(.headline)
-                        .fontWeight(.semibold)
-                    
-                    Text(achievement.difficulty)
-                        .font(.subheadline)
-                        .foregroundColor(.blue)
-                }
-                
-                Spacer()
-                
-                HStack(spacing: 4) {
-                    Image(systemName: achievement.priority.icon)
-                        .font(.caption)
-                    Text(achievement.priority.rawValue)
-                        .font(.caption)
-                        .fontWeight(.medium)
-                }
-                .foregroundColor(.white)
-                .padding(.horizontal, 8)
-                .padding(.vertical, 4)
-                .background(achievement.priority.color)
-                .cornerRadius(8)
-            }
-            
-            // 副本统计信息
-            HStack(spacing: 16) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("成就总数")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("\(achievement.calibratedStats.pieces.total)")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.blue)
-                }
-                
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("资历总数")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    
-                    Text("\(achievement.calibratedStats.seniority.total)")
-                        .font(.subheadline)
-                        .fontWeight(.bold)
-                        .foregroundColor(.orange)
-                }
-                
-                Spacer()
-                
-                if achievement.isCalibrated {
-                    HStack {
-                        Image(systemName: "checkmark.seal.fill")
-                            .foregroundColor(.green)
-                            .font(.caption)
-                        
-                        Text("已校验")
-                            .font(.caption)
-                            .foregroundColor(.green)
-                            .fontWeight(.medium)
-                    }
-                }
-            }
-            
-            // 角色完成情况
-            VStack(alignment: .leading, spacing: 8) {
-                Text("各角色进度")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
                     .fontWeight(.medium)
-                
-                ForEach(characters, id: \.id) { character in
-                    CharacterAchievementRow(
-                        character: character,
-                        achievement: achievement,
-                        achievementData: characterAchievementData[character]
-                    )
+                    .foregroundColor(.orange)
+                ForEach(colorStone.attribute) { attr in
+                    Text(attr.desc)
+                        .font(.caption2)
+                        .foregroundColor(.secondary)
                 }
             }
-            
+            Spacer()
         }
-        .padding()
-        .background(Color(.systemBackground))
-        .cornerRadius(12)
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(achievement.priority.color.opacity(0.3), lineWidth: 1)
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(.quaternarySystemFill))
         )
-        .onTapGesture {
-            withAnimation(.easeInOut, {
-                showingAchievementDetail = true
-            })
-        }
-        .sheet(isPresented: $showingAchievementDetail) {
-            AchievementDetailView(achievementData: achievement)
-        }
     }
 }
 
-// MARK: - 角色成就行
-struct CharacterAchievementRow: View {
-    let character: GameCharacter
-    let achievement: DungeonAchievementData
-    let achievementData: AchievementData?
-    
-    private var completionRate: Double {
-        guard let achievementData = achievementData,
-              let dungeonStats = achievementData.data.dungeons[achievement.dungeonName]?[achievement.difficulty] else {
-            return 0
-        }
-        
-        return dungeonStats.pieces.total > 0 
-            ? Double(dungeonStats.pieces.speed) / Double(dungeonStats.pieces.total) * 100 
-            : 0
-    }
-    
-    private var completionText: String {
-        guard let achievementData = achievementData,
-              let dungeonStats = achievementData.data.dungeons[achievement.dungeonName]?[achievement.difficulty] else {
-            return "(0/0)"
-        }
-        
-        return "(\(dungeonStats.pieces.speed)/\(dungeonStats.pieces.total))"
-    }
+// MARK: - 附魔视图
+struct EnchantView: View {
+    let enchant: Enchant
     
     var body: some View {
-        HStack {
-            Text(character.name)
+        VStack(alignment: .leading, spacing: 4) {
+            Text(enchant.name)
                 .font(.caption)
                 .fontWeight(.medium)
-                .frame(width: 60, alignment: .leading)
+                .foregroundColor(.blue)
             
-            ProgressView(value: completionRate / 100)
-                .progressViewStyle(LinearProgressViewStyle(tint: 
-                    completionRate < 30 ? .red : 
-                    completionRate < 60 ? .orange : .green))
-                .frame(height: 4)
-            
-            Text(completionText)
-                .font(.caption2)
-                .foregroundColor(.secondary)
-                .frame(width: 50, alignment: .trailing)
-        }
-    }
-}
-
-// MARK: - 成就统计项
-struct AchievementStatItem: View {
-    let title: String
-    let value: String
-    let subtitle: String
-    let color: Color
-    
-    var body: some View {
-        VStack(spacing: 4) {
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-            
-            HStack(alignment: .firstTextBaseline, spacing: 2) {
-                Text(value)
-                    .font(.title3)
-                    .fontWeight(.bold)
-                    .foregroundColor(color)
-                
-                if !subtitle.isEmpty {
-                    Text(subtitle)
+            ForEach(enchant.attributes) { attr in
+                ForEach(attr.attrib) { desc in
+                    Text("• \(desc.desc)")
                         .font(.caption2)
                         .foregroundColor(.secondary)
                 }
             }
         }
-        .frame(maxWidth: .infinity)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(.quaternarySystemFill))
+        )
     }
 }
+
+// MARK: - 大附魔视图
+struct CommonEnchantView: View {
+    let enchant: CommonEnchant
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(enchant.name)
+                .font(.caption)
+                .fontWeight(.medium)
+                .foregroundColor(.purple)
+            
+            Text(enchant.desc)
+                .font(.caption2)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(Color(.quaternarySystemFill))
+        )
+    }
+}
+
+

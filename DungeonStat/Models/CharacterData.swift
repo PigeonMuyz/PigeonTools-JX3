@@ -54,10 +54,90 @@ struct Equipment: Codable, Identifiable {
     let maxStrengthLevel: String
     let color: String
     let desc: String
+    let source: String?
+    let fiveStone: [FiveStone]?
+    let colorStone: ColorStone?
+    let permanentEnchant: [Enchant]?
+    let commonEnchant: CommonEnchant?
     
     private enum CodingKeys: String, CodingKey {
-        case name, `class`, icon, kind, subKind, quality, strengthLevel, maxStrengthLevel, color, desc
+        case name, `class`, icon, kind, subKind, quality, strengthLevel, maxStrengthLevel, color, desc, source, fiveStone, colorStone, permanentEnchant, commonEnchant
     }
+}
+
+struct FiveStone: Codable, Identifiable {
+    let id = UUID()
+    let name: String
+    let level: String
+    let max: String
+    let min: String
+    let icon: String
+    let kind: String
+    let subKind: String
+    let desc: String
+    let percent: Bool
+    
+    private enum CodingKeys: String, CodingKey {
+        case name, level, max, min, icon, kind, subKind, desc, percent
+    }
+}
+
+struct ColorStone: Codable, Identifiable {
+    let id: String
+    let name: String
+    let `class`: String
+    let level: String
+    let icon: String
+    let kind: String
+    let subKind: String
+    let attribute: [ColorStoneAttribute]
+}
+
+struct ColorStoneAttribute: Codable, Identifiable {
+    let id = UUID()
+    let max: String
+    let min: String
+    let desc: String
+    let percent: Bool
+    
+    private enum CodingKeys: String, CodingKey {
+        case max, min, desc, percent
+    }
+}
+
+struct Enchant: Codable, Identifiable {
+    let id: String
+    let name: String
+    let level: String
+    let icon: String
+    let attributes: [EnchantAttribute]
+}
+
+struct EnchantAttribute: Codable, Identifiable {
+    let id = UUID()
+    let max: String
+    let min: String
+    let attrib: [AttribDesc]
+    
+    private enum CodingKeys: String, CodingKey {
+        case max, min, attrib
+    }
+}
+
+struct AttribDesc: Codable, Identifiable {
+    let id = UUID()
+    let desc: String
+    
+    private enum CodingKeys: String, CodingKey {
+        case desc
+    }
+}
+
+struct CommonEnchant: Codable, Identifiable {
+    let id: String
+    let name: String
+    let icon: String
+    let desc: String
 }
 
 struct Qixue: Codable, Identifiable {

@@ -53,6 +53,11 @@ struct EquipmentInfo: Codable {
     let maxStrengthLevel: String
     let color: String
     let desc: String
+    let source: String?
+    let fiveStone: [FiveStone]?
+    let colorStone: ColorStone?
+    let permanentEnchant: [Enchant]?
+    let commonEnchant: CommonEnchant?
 }
 
 struct QixueInfo: Codable {
@@ -404,7 +409,12 @@ class JX3APIService {
                     strengthLevel: equipInfo.strengthLevel,
                     maxStrengthLevel: equipInfo.maxStrengthLevel,
                     color: equipInfo.color,
-                    desc: equipInfo.desc
+                    desc: equipInfo.desc,
+                    source: equipInfo.source,
+                    fiveStone: equipInfo.fiveStone,
+                    colorStone: equipInfo.colorStone,
+                    permanentEnchant: equipInfo.permanentEnchant,
+                    commonEnchant: equipInfo.commonEnchant
                 )
             },
             qixueList: detailedData.qixueList.map { qixueInfo in
