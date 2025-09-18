@@ -1072,7 +1072,7 @@ struct DashboardView: View {
     @AppStorage("showWelcomeBackRow") private var showWelcomeBackRow = true
     @AppStorage("dashboardExpandedSections") private var expandedSectionsData = ""
     @AppStorage("dashboardPanelConfig") private var panelConfigData = ""
-    @State private var showingQuickStart = false
+    @State private var showingQuickPanel = false
     @State private var showingCharacterSelector = false
     @State private var weeklyCdRefreshTrigger = 0
     @State private var expandedSections: Set<String> = []
@@ -1129,16 +1129,17 @@ struct DashboardView: View {
                 
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Button(action: {
-                        showingQuickStart = true
+                        showingQuickPanel = true
                     }) {
-                        Image(systemName: "plus")
+                        Image(systemName: "square.grid.2x2")
                             .font(.title2)
                             .foregroundColor(.blue)
                     }
                 }
             }
-            .sheet(isPresented: $showingQuickStart) {
-                QuickStartView(isPresented: $showingQuickStart)
+            .sheet(isPresented: $showingQuickPanel) {
+                QuickActionPanel(isPresented: $showingQuickPanel)
+                    .environmentObject(dungeonManager)
             }
             .sheet(isPresented: $showingCharacterSelector) {
                 CharacterSelectorView(isPresented: $showingCharacterSelector)
@@ -1457,6 +1458,176 @@ struct QuickStartView: View {
     }
 }
 
+
+
+struct QuickActionPanel: View {
+    @Binding var isPresented: Bool
+    @EnvironmentObject var dungeonManager: DungeonManager
+    @State private var isProcessing = false
+
+    private var selectedCharacter: GameCharacter? {
+        dungeonManager.selectedCharacter
+    }
+
+    private var inProgressDungeons: [Dungeon] {
+        guard let character = selectedCharacter else { return [] }
+        return dungeonManager.dungeons.filter { $0.isInProgress(for: character) }
+    }
+
+    private var recommendedDungeons: [Dungeon] {
+        guard let character = selectedCharacter else { return [] }
+        return dungeonManager.dungeons
+            .sorted { lhs, rhs in
+                let lhsWeekly = lhs.weeklyCount(for: character)
+                let rhsWeekly = rhs.weeklyCount(for: character)
+                if lhsWeekly == rhsWeekly {
+                    return lhs.name < rhs.name
+                }
+                return lhsWeekly > rhsWeekly
+            }
+    }
+
+    var body: some View {
+        NavigationView {
+            List {
+                if let character = selectedCharacter {
+                    if !inProgressDungeons.isEmpty {
+                        Section(header: Text("进行中的副本")) {
+                            ForEach(inProgressDungeons) { dungeon in
+                                inProgressRow(dungeon: dungeon, character: character)
+                            }
+                        }
+                    }
+
+                    Section(header: Text("快速开始")) {
+                        if recommendedDungeons.isEmpty {
+                            Text("暂无可用副本")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                        } else {
+                            ForEach(recommendedDungeons) { dungeon in
+                                if !(dungeon.isInProgress(for: character)) {
+                                    quickStartRow(dungeon: dungeon, character: character)
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    VStack(spacing: 12) {
+                        Image(systemName: "person.crop.circle.badge.exclam")
+                            .font(.system(size: 44))
+                            .foregroundColor(.orange)
+                        Text("请先在仪表盘选择角色")
+                            .foregroundColor(.secondary)
+                            .font(.subheadline)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .padding(.vertical, 24)
+                    .listRowBackground(Color.clear)
+                }
+            }
+            .navigationTitle("快捷面板")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("完成") {
+                        isPresented = false
+                    }
+                }
+            }
+        }
+        .interactiveDismissDisabled(isProcessing)
+        .presentationDetents([.medium, .large])
+    }
+
+    private func inProgressRow(dungeon: Dungeon, character: GameCharacter) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(dungeon.name)
+                    .font(.headline)
+                Spacer()
+                if let start = dungeon.startTime(for: character) {
+                    Text(start, style: .timer)
+                        .font(.caption)
+                        .monospacedDigit()
+                        .foregroundColor(.blue)
+                }
+            }
+
+            HStack(spacing: 12) {
+                Button {
+                    perform(action: .complete, dungeon: dungeon, character: character)
+                } label: {
+                    Label("完成", systemImage: "checkmark.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.green)
+
+                Button(role: .destructive) {
+                    perform(action: .cancel, dungeon: dungeon, character: character)
+                } label: {
+                    Label("停止", systemImage: "xmark.circle")
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    private func quickStartRow(dungeon: Dungeon, character: GameCharacter) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text(dungeon.name)
+                    .font(.headline)
+                Spacer()
+                let weekly = dungeon.weeklyCount(for: character)
+                let total = dungeon.totalCount(for: character)
+                Text("本周 \(weekly) · 总计 \(total)")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+
+            Button {
+                perform(action: .start, dungeon: dungeon, character: character)
+            } label: {
+                Label("立即开始", systemImage: "play.circle")
+                    .font(.caption)
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private enum QuickAction {
+        case start
+        case complete
+        case cancel
+    }
+
+    private func perform(action: QuickAction, dungeon: Dungeon, character: GameCharacter) {
+        guard let index = dungeonManager.dungeons.firstIndex(where: { $0.id == dungeon.id }) else { return }
+        guard !isProcessing else { return }
+        isProcessing = true
+
+        let originalCharacter = dungeonManager.selectedCharacter
+        dungeonManager.selectedCharacter = character
+
+        switch action {
+        case .start:
+            dungeonManager.startDungeon(at: index)
+        case .complete:
+            dungeonManager.completeDungeon(at: index)
+        case .cancel:
+            dungeonManager.cancelDungeonForCharacter(at: index, character: character)
+        }
+
+        dungeonManager.selectedCharacter = originalCharacter
+        isProcessing = false
+    }
+}
 
 
 struct InProgressTask {
