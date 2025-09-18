@@ -14,7 +14,7 @@ struct WeeklyCdStatusCard: View {
     @State private var isLoading = false
     @State private var isRefreshing = false  // 用于区分首次加载和刷新
     @State private var errorMessage: String?
-    @State private var showingError = false
+    @State private var consecutiveFailures = 0
     @State private var lastLoadedCharacter: GameCharacter?
     @State private var lastRefreshTime: Date?
     
@@ -38,18 +38,27 @@ struct WeeklyCdStatusCard: View {
             }
             // 如果有数据，显示数据（可能带有刷新动画）
             else if let teamCdData = teamCdData {
-                ZStack {
-                    dungeonCdContent(teamCdData)
-                        .opacity(isRefreshing ? 0.5 : 1.0)
+                VStack(spacing: 8) {
+                    ZStack {
+                        dungeonCdContent(teamCdData)
+                            .opacity(isRefreshing ? 0.5 : 1.0)
+                        
+                        // 刷新时在数据上显示loading
+                        if isRefreshing {
+                            ProgressView()
+                                .scaleEffect(1.2)
+                                .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                        }
+                    }
+                    .animation(.easeInOut(duration: 0.3), value: isRefreshing)
                     
-                    // 刷新时在数据上显示loading
-                    if isRefreshing {
-                        ProgressView()
-                            .scaleEffect(1.2)
-                            .progressViewStyle(CircularProgressViewStyle(tint: .blue))
+                    if let error = errorMessage {
+                        Text(error)
+                            .font(.caption)
+                            .foregroundColor(.red)
+                            .multilineTextAlignment(.center)
                     }
                 }
-                .animation(.easeInOut(duration: 0.3), value: isRefreshing)
             } else if dungeonManager.selectedCharacter == nil {
                 VStack(spacing: 12) {
                     Image(systemName: "person.crop.circle.badge.questionmark")
@@ -83,11 +92,6 @@ struct WeeklyCdStatusCard: View {
                 .padding(.vertical, 20)
             }
         }
-        .alert("查询失败", isPresented: $showingError) {
-            Button("确定") { }
-        } message: {
-            Text(errorMessage ?? "未知错误")
-        }
         .onAppear {
             // 每次出现在屏幕上都尝试刷新
             if let selectedCharacter = dungeonManager.selectedCharacter {
@@ -104,6 +108,7 @@ struct WeeklyCdStatusCard: View {
                         // 新角色，清空数据并重新加载
                         await MainActor.run {
                             teamCdData = nil
+                            consecutiveFailures = 0
                         }
                         await loadTeamCdData(for: character, isRefresh: false)
                     } else {
@@ -115,6 +120,7 @@ struct WeeklyCdStatusCard: View {
                 teamCdData = nil
                 errorMessage = nil
                 lastLoadedCharacter = nil
+                consecutiveFailures = 0
             }
         }
         .onChange(of: refreshTrigger) { _, _ in
@@ -161,42 +167,50 @@ struct WeeklyCdStatusCard: View {
             errorMessage = nil
         }
         
-        do {
-            let data = try await JX3APIService.shared.fetchTeamCdList(
-                server: character.server,
-                name: character.name
-            )
-            
-            await MainActor.run {
-                // 检查数据是否有变化
-                let hasChanges = !isDataEqual(old: self.teamCdData, new: data)
+        var lastError: Error?
+        
+        for _ in 0..<2 {
+            do {
+                let data = try await JX3APIService.shared.fetchTeamCdList(
+                    server: character.server,
+                    name: character.name
+                )
                 
-                if hasChanges || !isRefresh {
-                    withAnimation(.easeInOut(duration: 0.3)) {
-                        self.teamCdData = data
+                await MainActor.run {
+                    // 检查数据是否有变化
+                    let hasChanges = !isDataEqual(old: self.teamCdData, new: data)
+                    
+                    if hasChanges || !isRefresh {
+                        withAnimation(.easeInOut(duration: 0.3)) {
+                            self.teamCdData = data
+                        }
                     }
+                    
+                    self.lastLoadedCharacter = character
+                    self.lastRefreshTime = Date()
+                    self.isLoading = false
+                    self.isRefreshing = false
+                    self.consecutiveFailures = 0
                 }
-                
-                self.lastLoadedCharacter = character
-                self.lastRefreshTime = Date()
-                self.isLoading = false
-                self.isRefreshing = false
+                return
+            } catch {
+                lastError = error
             }
-        } catch {
-            await MainActor.run {
-                self.errorMessage = error.localizedDescription
-                self.isLoading = false
-                self.isRefreshing = false
-                // 刷新失败时不显示错误弹窗，只在首次加载失败时显示
-                if !isRefresh {
-                    self.showingError = true
-                }
-            }
+        }
+        
+        await MainActor.run {
+            self.errorMessage = lastError?.localizedDescription ?? "未知错误"
+            self.isLoading = false
+            self.isRefreshing = false
+            self.consecutiveFailures = min(self.consecutiveFailures + 1, 3)
         }
     }
     
     // 自动刷新逻辑
     private func autoRefreshIfNeeded(for character: GameCharacter) async {
+        if teamCdData == nil && consecutiveFailures > 0 {
+            return
+        }
         // 如果角色变了，或者没有数据，或者距离上次刷新超过30秒，则刷新
         let shouldRefresh = lastLoadedCharacter?.id != character.id ||
                            teamCdData == nil ||
