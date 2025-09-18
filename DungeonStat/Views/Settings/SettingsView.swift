@@ -99,6 +99,22 @@ struct SettingsView: View {
                         }
                     }
                     
+                    NavigationLink(destination: DashboardPanelSettingsView()) {
+                        HStack {
+                            Image(systemName: "rectangle.grid.2x2")
+                                .foregroundColor(.purple)
+                                .frame(width: 24)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("仪表盘面板自定义")
+                                    .font(.headline)
+                                Text("选择显示哪些面板并拖动排序")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                    }
+                    
                     NavigationLink(destination: TeamRecruitSettingsView()) {
                         HStack {
                             Image(systemName: "person.3.fill")
@@ -172,6 +188,88 @@ struct SettingsView: View {
     
     private var hasAPITokens: Bool {
         !jx3ApiToken.isEmpty || !jx3ApiTokenV2.isEmpty || !jx3ApiTicket.isEmpty
+    }
+}
+
+// MARK: - 仪表盘面板设置视图
+struct DashboardPanelSettingsView: View {
+    @AppStorage("dashboardPanelConfig") private var panelConfigData = ""
+    @State private var panelStates: [DashboardPanelState] = DashboardPanelState.defaultStates
+    
+    var body: some View {
+        List {
+            Section(footer: Text("“周副本进度”面板始终显示，其余面板可根据需要启用或拖动排序。")
+                .font(.caption)
+                .foregroundColor(.secondary)) {
+                ForEach($panelStates) { $panel in
+                    DashboardPanelRow(panel: $panel)
+                }
+                .onMove(perform: movePanels)
+            }
+        }
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("仪表盘面板")
+        .navigationBarTitleDisplayMode(.inline)
+        .onAppear {
+            panelStates = DashboardPanelState.load(from: panelConfigData)
+        }
+        .onChange(of: panelStates) { newValue in
+            let sanitized = DashboardPanelState.sanitized(newValue)
+            if sanitized != newValue {
+                panelStates = sanitized
+            } else {
+                savePanels()
+            }
+        }
+    }
+    
+    private func movePanels(from offsets: IndexSet, to destination: Int) {
+        panelStates.move(fromOffsets: offsets, toOffset: destination)
+        panelStates = DashboardPanelState.sanitized(panelStates)
+    }
+    
+    private func savePanels() {
+        let encoded = DashboardPanelState.encodeToString(panelStates)
+        if panelConfigData != encoded {
+            panelConfigData = encoded
+        }
+    }
+}
+
+struct DashboardPanelRow: View {
+    @Binding var panel: DashboardPanelState
+    
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: panel.type.iconName)
+                .foregroundColor(panel.type.iconColor)
+                .frame(width: 24)
+            
+            VStack(alignment: .leading, spacing: 4) {
+                Text(panel.type.title)
+                    .font(.headline)
+                Text(panel.type.subtitle)
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            }
+            
+            Spacer()
+            
+            if panel.type == .weeklyProgress {
+                Text("必选")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.secondary.opacity(0.1))
+                    .cornerRadius(8)
+            } else {
+                Toggle("", isOn: $panel.isEnabled)
+                    .labelsHidden()
+            }
+        }
+        .padding(.vertical, 6)
+        .moveDisabled(panel.type == .weeklyProgress)
     }
 }
 
@@ -802,15 +900,183 @@ struct CollapsibleSectionHeader: View {
     }
 }
 
+// MARK: - 仪表盘面板配置
+enum DashboardPanelType: String, CaseIterable, Codable, Identifiable {
+    case weeklyProgress
+    case weeklyStatus
+    case weeklyDrops
+    case inProgressTasks
+    case characterDetails
+    
+    var id: String { rawValue }
+    
+    var title: String {
+        switch self {
+        case .weeklyProgress:
+            return "周副本进度"
+        case .weeklyStatus:
+            return "本周副本状态"
+        case .weeklyDrops:
+            return "本周掉落"
+        case .inProgressTasks:
+            return "进行中的任务"
+        case .characterDetails:
+            return "角色详情"
+        }
+    }
+    
+    var subtitle: String {
+        switch self {
+        case .weeklyProgress:
+            return "对比本周与上周的刷本数量"
+        case .weeklyStatus:
+            return "实时查询队伍副本冷却"
+        case .weeklyDrops:
+            return "展示游戏周内的重要掉落"
+        case .inProgressTasks:
+            return "汇总所有进行中的副本任务"
+        case .characterDetails:
+            return "按角色拆解副本进度和统计"
+        }
+    }
+    
+    var iconName: String {
+        switch self {
+        case .weeklyProgress:
+            return "chart.pie.fill"
+        case .weeklyStatus:
+            return "clock.arrow.2.circlepath"
+        case .weeklyDrops:
+            return "sparkles"
+        case .inProgressTasks:
+            return "list.bullet.clipboard"
+        case .characterDetails:
+            return "person.3.fill"
+        }
+    }
+    
+    var iconColor: Color {
+        switch self {
+        case .weeklyProgress:
+            return .purple
+        case .weeklyStatus:
+            return .blue
+        case .weeklyDrops:
+            return .orange
+        case .inProgressTasks:
+            return .green
+        case .characterDetails:
+            return .pink
+        }
+    }
+    
+    var sectionId: String { rawValue }
+    var defaultIsEnabled: Bool { true }
+    
+    var sortPriority: Int {
+        switch self {
+        case .weeklyProgress: return 0
+        case .weeklyStatus: return 1
+        case .weeklyDrops: return 2
+        case .inProgressTasks: return 3
+        case .characterDetails: return 4
+        }
+    }
+}
+
+struct DashboardPanelState: Identifiable, Codable, Equatable {
+    var type: DashboardPanelType
+    var isEnabled: Bool
+    var order: Int
+    
+    var id: DashboardPanelType { type }
+    
+    static var defaultStates: [DashboardPanelState] {
+        sanitized(
+            DashboardPanelType.allCases.map { type in
+                DashboardPanelState(type: type, isEnabled: type.defaultIsEnabled || type == .weeklyProgress, order: type.sortPriority)
+            }
+        )
+    }
+    
+    static func sanitized(_ states: [DashboardPanelState]) -> [DashboardPanelState] {
+        let orderedStates = states.enumerated().map { index, state -> DashboardPanelState in
+            var mutable = state
+            mutable.order = index
+            return mutable
+        }
+
+        var unique: [DashboardPanelType: DashboardPanelState] = [:]
+
+        for state in orderedStates {
+            var entry = state
+            if let existing = unique[state.type] {
+                entry.isEnabled = state.isEnabled || existing.isEnabled
+            }
+            unique[state.type] = entry
+        }
+
+        for type in DashboardPanelType.allCases where unique[type] == nil {
+            unique[type] = DashboardPanelState(
+                type: type,
+                isEnabled: type.defaultIsEnabled || type == .weeklyProgress,
+                order: type.sortPriority
+            )
+        }
+
+        var ordered = unique.values.sorted { lhs, rhs in
+            if lhs.order == rhs.order {
+                return lhs.type.sortPriority < rhs.type.sortPriority
+            }
+            return lhs.order < rhs.order
+        }
+
+        if let index = ordered.firstIndex(where: { $0.type == .weeklyProgress }) {
+            let pinned = ordered.remove(at: index)
+            ordered.insert(pinned, at: 0)
+        }
+
+        return ordered.enumerated().map { index, state in
+            var mutable = state
+            mutable.order = index
+            if mutable.type == .weeklyProgress {
+                mutable.isEnabled = true
+            }
+            return mutable
+        }
+    }
+    
+    static func load(from data: String) -> [DashboardPanelState] {
+        guard let jsonData = data.data(using: .utf8) else { return defaultStates }
+        do {
+            let decoded = try JSONDecoder().decode([DashboardPanelState].self, from: jsonData)
+            return sanitized(decoded)
+        } catch {
+            return defaultStates
+        }
+    }
+    
+    static func encodeToString(_ states: [DashboardPanelState]) -> String {
+        let sanitizedStates = sanitized(states)
+        guard let data = try? JSONEncoder().encode(sanitizedStates),
+              let string = String(data: data, encoding: .utf8) else {
+            return ""
+        }
+        return string
+    }
+}
+
 // MARK: - 仪表盘页面（Dashboard）
 struct DashboardView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @AppStorage("showWelcomeBackRow") private var showWelcomeBackRow = true
     @AppStorage("dashboardExpandedSections") private var expandedSectionsData = ""
+    @AppStorage("dashboardPanelConfig") private var panelConfigData = ""
     @State private var showingQuickStart = false
     @State private var showingCharacterSelector = false
     @State private var weeklyCdRefreshTrigger = 0
     @State private var expandedSections: Set<String> = []
+    @State private var panelStates: [DashboardPanelState] = DashboardPanelState.defaultStates
     
     private var currentTimeGreeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
@@ -850,66 +1116,8 @@ struct DashboardView: View {
                     }
                 }
                 
-                // 周副本完成进度（圆形进度条）
-                Section(header: CollapsibleSectionHeader(
-                    title: "周副本进度",
-                    sectionId: "weeklyProgress",
-                    isExpanded: expandedSections.contains("weeklyProgress"),
-                    onToggle: { toggleSection("weeklyProgress") }
-                )) {
-                    if expandedSections.contains("weeklyProgress") {
-                        WeeklyProgressRow()
-                    }
-                }
-                
-                // 本周副本状态
-                Section(header: HStack {
-                    CollapsibleSectionHeader(
-                        title: "本周副本状态",
-                        sectionId: "weeklyStatus",
-                        isExpanded: expandedSections.contains("weeklyStatus"),
-                        onToggle: { toggleSection("weeklyStatus") }
-                    )
-                    Spacer()
-                    if dungeonManager.selectedCharacter != nil && expandedSections.contains("weeklyStatus") {
-                        Button(action: {
-                            weeklyCdRefreshTrigger += 1
-                        }) {
-                            Image(systemName: "arrow.clockwise")
-                                .foregroundColor(.blue)
-                                .font(.caption)
-                        }
-                    }
-                }) {
-                    if expandedSections.contains("weeklyStatus") {
-                        WeeklyCdStatusCard(refreshTrigger: weeklyCdRefreshTrigger)
-                    }
-                }
-                
-                // 全局进行中任务
-                Section(header: CollapsibleSectionHeader(
-                    title: "进行中的任务",
-                    sectionId: "inProgressTasks",
-                    isExpanded: expandedSections.contains("inProgressTasks"),
-                    onToggle: { toggleSection("inProgressTasks") }
-                )) {
-                    if expandedSections.contains("inProgressTasks") {
-                        AllInProgressTasksRows()
-                    }
-                }
-                
-                // 角色分组显示
-                if !dungeonManager.characters.isEmpty {
-                    Section(header: CollapsibleSectionHeader(
-                        title: "角色详情",
-                        sectionId: "characterDetails",
-                        isExpanded: expandedSections.contains("characterDetails"),
-                        onToggle: { toggleSection("characterDetails") }
-                    )) {
-                        if expandedSections.contains("characterDetails") {
-                            CharacterBreakdownRows()
-                        }
-                    }
+                ForEach(activePanels) { panel in
+                    section(for: panel.type)
                 }
             }
             .navigationTitle(dashboardTitle)
@@ -936,13 +1144,30 @@ struct DashboardView: View {
                 CharacterSelectorView(isPresented: $showingCharacterSelector)
             }
             .onAppear {
+                syncPanelStates()
                 // 初始化仪表盘
                 loadExpandedSections()
             }
             .onDisappear {
                 saveExpandedSections()
+                persistPanelStates()
             }
         }
+        .onChange(of: panelConfigData) { _, _ in
+            syncPanelStates()
+        }
+    }
+    
+    private var activePanels: [DashboardPanelState] {
+        panelStates
+            .filter { $0.isEnabled }
+            .filter { state in
+                if state.type == .characterDetails {
+                    return !dungeonManager.characters.isEmpty
+                }
+                return true
+            }
+            .sorted { $0.order < $1.order }
     }
     
     // MARK: - Helper Methods
@@ -962,13 +1187,102 @@ struct DashboardView: View {
             expandedSections = Set(expandedSectionsData.split(separator: ",").map(String.init))
         } else {
             // 默认展开的部分
-            expandedSections = ["weeklyProgress", "weeklyStatus", "characterDetails"]
+            expandedSections = ["weeklyProgress", "weeklyStatus", "weeklyDrops", "characterDetails"]
         }
     }
     
     private func saveExpandedSections() {
         // 保存展开的部分到字符串
         expandedSectionsData = expandedSections.joined(separator: ",")
+    }
+
+    private func syncPanelStates() {
+        let loaded = DashboardPanelState.load(from: panelConfigData)
+        panelStates = loaded
+        let encoded = DashboardPanelState.encodeToString(loaded)
+        if panelConfigData != encoded {
+            panelConfigData = encoded
+        }
+    }
+    
+    private func persistPanelStates() {
+        let encoded = DashboardPanelState.encodeToString(panelStates)
+        if panelConfigData != encoded {
+            panelConfigData = encoded
+        }
+    }
+    
+    @ViewBuilder
+    private func section(for type: DashboardPanelType) -> some View {
+        switch type {
+        case .weeklyProgress:
+            Section(header: CollapsibleSectionHeader(
+                title: type.title,
+                sectionId: type.sectionId,
+                isExpanded: expandedSections.contains(type.sectionId),
+                onToggle: { toggleSection(type.sectionId) }
+            )) {
+                if expandedSections.contains(type.sectionId) {
+                    WeeklyProgressRow()
+                }
+            }
+        case .weeklyStatus:
+            Section(header: HStack {
+                CollapsibleSectionHeader(
+                    title: type.title,
+                    sectionId: type.sectionId,
+                    isExpanded: expandedSections.contains(type.sectionId),
+                    onToggle: { toggleSection(type.sectionId) }
+                )
+                Spacer()
+                if dungeonManager.selectedCharacter != nil && expandedSections.contains(type.sectionId) {
+                    Button(action: {
+                        weeklyCdRefreshTrigger += 1
+                    }) {
+                        Image(systemName: "arrow.clockwise")
+                            .foregroundColor(.blue)
+                            .font(.caption)
+                    }
+                }
+            }) {
+                if expandedSections.contains(type.sectionId) {
+                    WeeklyCdStatusCard(refreshTrigger: weeklyCdRefreshTrigger)
+                }
+            }
+        case .weeklyDrops:
+            Section(header: CollapsibleSectionHeader(
+                title: type.title,
+                sectionId: type.sectionId,
+                isExpanded: expandedSections.contains(type.sectionId),
+                onToggle: { toggleSection(type.sectionId) }
+            )) {
+                if expandedSections.contains(type.sectionId) {
+                    WeeklyDropHighlightsCard()
+                }
+            }
+        case .inProgressTasks:
+            Section(header: CollapsibleSectionHeader(
+                title: type.title,
+                sectionId: type.sectionId,
+                isExpanded: expandedSections.contains(type.sectionId),
+                onToggle: { toggleSection(type.sectionId) }
+            )) {
+                if expandedSections.contains(type.sectionId) {
+                    AllInProgressTasksRows()
+                }
+            }
+        case .characterDetails:
+            Section(header: CollapsibleSectionHeader(
+                title: type.title,
+                sectionId: type.sectionId,
+                isExpanded: expandedSections.contains(type.sectionId),
+                onToggle: { toggleSection(type.sectionId) }
+            )) {
+                if expandedSections.contains(type.sectionId) {
+                    CharacterBreakdownRows()
+                }
+            }
+        }
     }
 }
 
@@ -2198,4 +2512,3 @@ struct WelcomeBackRow: View {
         }
     }
 }
-
