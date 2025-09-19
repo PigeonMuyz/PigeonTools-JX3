@@ -9,7 +9,7 @@ import Foundation
 
 // MARK: - 完成记录数据模型
 struct CompletionRecord: Identifiable, Codable, Equatable {
-    let id = UUID()
+    let id: UUID
     let dungeonName: String
     let character: GameCharacter
     let completedDate: Date
@@ -20,11 +20,19 @@ struct CompletionRecord: Identifiable, Codable, Equatable {
     
     // Equatable 协议的实现
     static func == (lhs: CompletionRecord, rhs: CompletionRecord) -> Bool {
-        return lhs.id == rhs.id
+        lhs.id == rhs.id &&
+        lhs.dungeonName == rhs.dungeonName &&
+        lhs.character == rhs.character &&
+        lhs.completedDate == rhs.completedDate &&
+        lhs.weekNumber == rhs.weekNumber &&
+        lhs.year == rhs.year &&
+        lhs.duration == rhs.duration &&
+        lhs.drops == rhs.drops
     }
     
-    init(dungeonName: String, character: GameCharacter, completedDate: Date,
+    init(id: UUID = UUID(), dungeonName: String, character: GameCharacter, completedDate: Date,
          weekNumber: Int, year: Int, duration: TimeInterval, drops: [DropItem] = []) {
+        self.id = id
         self.dungeonName = dungeonName
         self.character = character
         self.completedDate = completedDate

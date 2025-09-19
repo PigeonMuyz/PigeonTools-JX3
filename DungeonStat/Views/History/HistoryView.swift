@@ -12,6 +12,7 @@ struct HistoryView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
     @State private var showingAddManualRecord = false
     @State private var searchText = ""
+    @State private var selectedRecordID: UUID?
     
     // 过滤后的记录
     private var filteredRecords: [CompletionRecord] {
@@ -30,7 +31,9 @@ struct HistoryView: View {
     var body: some View {
         List {
             ForEach(filteredRecords) { record in
-                NavigationLink(destination: DropManagementView(record: record)) {
+                NavigationLink(tag: record.id, selection: $selectedRecordID) {
+                    DropManagementView(recordID: record.id)
+                } label: {
                     RecordRowView(record: record)
                 }
             }
@@ -51,12 +54,14 @@ struct HistoryView: View {
     }
     
     func deleteRecords(offsets: IndexSet) {
-        // 注意：这里需要从原始记录中找到对应的索引
         let originalRecords = dungeonManager.completionRecords
-        
+
         for index in offsets {
             let recordToDelete = filteredRecords[index]
             if let originalIndex = originalRecords.firstIndex(where: { $0.id == recordToDelete.id }) {
+                if selectedRecordID == recordToDelete.id {
+                    selectedRecordID = nil
+                }
                 dungeonManager.deleteCompletionRecord(originalRecords[originalIndex])
             }
         }

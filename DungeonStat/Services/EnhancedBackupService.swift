@@ -341,6 +341,7 @@ class EnhancedBackupService: ObservableObject {
                 } ?? []  // 如果没有drops字段则为空数组
                 
                 return CompletionRecord(
+                    id: backupRecord.id,
                     dungeonName: backupRecord.dungeonName,
                     character: GameCharacter(
                         server: backupRecord.character.server,

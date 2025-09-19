@@ -14,6 +14,7 @@ extension DungeonManager {
     func updateRecordCharacter(_ record: CompletionRecord, to newCharacter: GameCharacter) {
         if let index = completionRecords.firstIndex(where: { $0.id == record.id }) {
             let updatedRecord = CompletionRecord(
+                id: record.id,
                 dungeonName: record.dungeonName,
                 character: newCharacter,
                 completedDate: record.completedDate,
@@ -41,6 +42,7 @@ extension DungeonManager {
             let record = completionRecords[i]
             if record.character.id == oldCharacter.id {
                 let updatedRecord = CompletionRecord(
+                    id: record.id,
                     dungeonName: record.dungeonName,
                     character: newCharacter,
                     completedDate: record.completedDate,
