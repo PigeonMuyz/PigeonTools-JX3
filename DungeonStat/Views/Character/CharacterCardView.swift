@@ -15,7 +15,7 @@ struct CharacterCardView: View {
     @StateObject private var cacheService = CharacterCardCacheService.shared
     @State private var cardCache: CharacterCardCache?
     @State private var cardImage: UIImage?
-    @State private var isLoading = false
+    @State private var isLoading = true
     @State private var errorMessage: String?
     @State private var showingHistoricalCards = false
     @State private var showingShareSheet = false
@@ -135,7 +135,7 @@ struct CharacterCardView: View {
                 Text(alertMessage)
             }
         }
-        .task {
+        .task(id: taskIdentifier) {
             await loadCard()
         }
     }
@@ -144,6 +144,8 @@ struct CharacterCardView: View {
         await MainActor.run {
             isLoading = true
             errorMessage = nil
+            cardCache = nil
+            cardImage = nil
         }
         
         do {
@@ -221,6 +223,10 @@ struct CharacterCardView: View {
         alertMessage = "图片已复制到剪贴板"
         showingAlert = true
     }
+}
+
+private extension CharacterCardView {
+    var taskIdentifier: String { "\(server)-\(name)" }
 }
 
 struct HistoricalCardsView: View {

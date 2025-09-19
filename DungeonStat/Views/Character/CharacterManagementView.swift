@@ -331,15 +331,11 @@ struct AttributeComparisonCard: View {
 // MARK: - 角色管理视图
 struct CharacterManagementView: View {
     @EnvironmentObject var dungeonManager: DungeonManager
-    @State private var showingAddCharacter = false
-    @State private var showingCharacterDetail = false
-    @State private var showingAttributeComparison = false
+    @State private var activeSheet: CharacterManagementSheet?
     @State private var selectedCharacterForDetail: GameCharacter?
-    @State private var selectedCharacterForEquipment: GameCharacter?
     @State private var selectedCharactersForComparison: Set<GameCharacter> = []
     @State private var characterDetailData: CharacterDetailData?
     @State private var isLoadingDetail = false
-    @State private var showingCharacterCard = false
     @State private var selectedCharacterForCard: GameCharacter?
     
     // 搜索和对比状态
@@ -454,19 +450,13 @@ struct CharacterManagementView: View {
                     }
                     .swipeActions(edge: .leading, allowsFullSwipe: false) {
                         if !isComparisonMode {
-                            // 角色名片按钮
                             Button {
                                 selectedCharacterForCard = gameCharacter
-//                                showingCharacterCard = true
+                                activeSheet = .card(gameCharacter)
                             } label: {
                                 Image(systemName: "person.crop.rectangle")
                             }
                             .tint(.green)
-                        }
-                    }
-                    .onChange(of: selectedCharacterForCard) {
-                        if selectedCharacterForCard != nil {
-                            showingCharacterCard = true
                         }
                     }
                 }
@@ -498,7 +488,8 @@ struct CharacterManagementView: View {
                             .foregroundColor(.red)
                             
                             Button("属性比较") {
-                                showingAttributeComparison = true
+                                let ordered = selectedCharactersForComparison.sorted { $0.name < $1.name }
+                                activeSheet = .comparison(ordered)
                             }
                             .font(.caption)
                             .foregroundColor(.white)
@@ -582,29 +573,33 @@ struct CharacterManagementView: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 HStack {
                     Button("添加角色") {
-                        showingAddCharacter = true
+                        activeSheet = .add
                     }
                     .disabled(isComparisonMode)
                 }
             }
         }
-        .sheet(isPresented: $showingAddCharacter) {
-            AddCharacterView(isPresented: $showingAddCharacter)
-        }
-        .sheet(isPresented: $showingCharacterDetail) {
-            CharacterDetailSheet(
-                character: selectedCharacterForDetail,
-                characterData: characterDetailData,
-                isLoading: isLoadingDetail
-            )
-        }
-        .sheet(isPresented: $showingAttributeComparison) {
-            AttributeComparisonSheet(characters: Array(selectedCharactersForComparison))
-        }
-        .sheet(isPresented: $showingCharacterCard, onDismiss: {
+        .sheet(item: $activeSheet, onDismiss: {
+            isLoadingDetail = false
+            characterDetailData = nil
+            selectedCharacterForDetail = nil
             selectedCharacterForCard = nil
-        }) {
-            if let character = selectedCharacterForCard {
+        }) { sheet in
+            switch sheet {
+            case .add:
+                AddCharacterView(isPresented: Binding(get: {
+                    if case .add = activeSheet { return true }
+                    return false
+                }, set: { if !$0 { activeSheet = nil } }))
+            case .detail(let character):
+                CharacterDetailSheet(
+                    character: character,
+                    characterData: characterDetailData,
+                    isLoading: isLoadingDetail
+                )
+            case .comparison(let characters):
+                AttributeComparisonSheet(characters: characters)
+            case .card(let character):
                 CharacterCardView(server: character.server, name: character.name)
             }
         }
@@ -612,6 +607,9 @@ struct CharacterManagementView: View {
     
     func loadCharacterDetail(for character: GameCharacter) {
         isLoadingDetail = true
+        characterDetailData = nil
+        selectedCharacterForDetail = character
+        activeSheet = .detail(character)
         
         Task {
             do {
@@ -628,13 +626,13 @@ struct CharacterManagementView: View {
                         data: data,
                         time: nil
                     )
-                    showingCharacterDetail = true
+                    activeSheet = .detail(character)
                 }
             } catch {
                 await MainActor.run {
                     isLoadingDetail = false
                     characterDetailData = nil
-                    showingCharacterDetail = true
+                    activeSheet = .detail(character)
                     print("角色数据加载失败: \(error)")
                 }
             }
@@ -1778,3 +1776,26 @@ struct CommonEnchantView: View {
 }
 
 
+private enum CharacterManagementSheet: Identifiable {
+    case add
+    case detail(GameCharacter)
+    case comparison([GameCharacter])
+    case card(GameCharacter)
+
+    var id: String {
+        switch self {
+        case .add:
+            return "add"
+        case .detail(let character):
+            return "detail-\(character.id)"
+        case .comparison(let characters):
+            let ids = characters
+                .map { $0.id.uuidString }
+                .sorted()
+                .joined(separator: "-")
+            return "comparison-\(ids)"
+        case .card(let character):
+            return "card-\(character.id)"
+        }
+    }
+}
