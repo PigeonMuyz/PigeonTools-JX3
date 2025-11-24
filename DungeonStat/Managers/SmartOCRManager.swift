@@ -479,7 +479,7 @@ struct SmartAddDropView: View {
                 }
             }
         .onChange(of: selectedPhotoItem) { photoItem in
-            Task {
+            Task {   
                 if let photoItem = photoItem,
                    let data = try? await photoItem.loadTransferable(type: Data.self),
                    let image = UIImage(data: data) {

@@ -64,11 +64,11 @@ struct SettingsView: View {
                             Image(systemName: "clock")
                                 .foregroundColor(.gray)
                                 .frame(width: 24)
-                            
+
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("备份间隔")
                                     .font(.headline)
-                                
+
                                 Picker("", selection: $backupInterval) {
                                     Text("6小时").tag(6)
                                     Text("12小时").tag(12)
@@ -79,8 +79,33 @@ struct SettingsView: View {
                             }
                         }
                     }
+
+                    // 数据迁移工具
+                    NavigationLink(destination: MigrationTestView()) {
+                        HStack {
+                            Image(systemName: "arrow.triangle.2.circlepath")
+                                .foregroundColor(.blue)
+                                .frame(width: 24)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("数据迁移工具")
+                                    .font(.headline)
+                                Text("升级数据格式，优化性能")
+                                    .font(.caption)
+                                    .foregroundColor(.secondary)
+                            }
+
+                            Spacer()
+
+                            // 如果需要迁移，显示提示标记
+                            if MigrationManager.shared.needsMigration(to: .v2_characterID) {
+                                Image(systemName: "exclamationmark.circle.fill")
+                                    .foregroundColor(.orange)
+                            }
+                        }
+                    }
                 }
-                
+
                 // 界面设置区域
                 Section(header: Text("界面设置")) {
                     Toggle(isOn: $showWelcomeBackRow) {
